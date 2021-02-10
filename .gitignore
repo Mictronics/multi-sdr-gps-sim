@@ -1,0 +1,32 @@
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.so
+*.so.*
+
+# Executables
+*.out
+*.hex
+gps-sim
+
+# Debug files
+*.dSYM/
+
+# Output
+*.bin
+
+# Netbeans project folder
+nbproject/*
+
+# Rinex files
+*.gz
