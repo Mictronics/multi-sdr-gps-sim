@@ -26,7 +26,7 @@
 
 /**
  * Note:
- * Not all stations provide RINEX data with ionoshere data.
+ * Not all stations provide RINEX data with ionosphere data.
  */
 
 /**
@@ -2787,13 +2787,17 @@ void *gps_thread_ep(void *arg) {
 
     if (simulator->show_verbose) {
         pthread_mutex_lock(&simulator->gui_lock);
-        gui_mvwprintw(LS_FIX, 13, 40, "ION ALPHA %12.3e %12.3e %12.3e %12.3e",
-                ionoutc.alpha0, ionoutc.alpha1, ionoutc.alpha2, ionoutc.alpha3);
-        gui_mvwprintw(LS_FIX, 14, 40, "ION BETA  %12.3e %12.3e %12.3e %12.3e",
-                ionoutc.beta0, ionoutc.beta1, ionoutc.beta2, ionoutc.beta3);
-        gui_mvwprintw(LS_FIX, 15, 40, "DELTA UTC %12.3e %12.3e %9d  %9d",
-                ionoutc.A0, ionoutc.A1, ionoutc.tot, ionoutc.wnt);
-        gui_mvwprintw(LS_FIX, 16, 40, "LEAP SECONDS %d", ionoutc.dtls);
+        if (ionoutc.vflg && ionoutc.enable) {
+            gui_mvwprintw(LS_FIX, 13, 40, "ION ALPHA %12.3e %12.3e %12.3e %12.3e",
+                    ionoutc.alpha0, ionoutc.alpha1, ionoutc.alpha2, ionoutc.alpha3);
+            gui_mvwprintw(LS_FIX, 14, 40, "ION BETA  %12.3e %12.3e %12.3e %12.3e",
+                    ionoutc.beta0, ionoutc.beta1, ionoutc.beta2, ionoutc.beta3);
+            gui_mvwprintw(LS_FIX, 15, 40, "DELTA UTC %12.3e %12.3e %9d  %9d",
+                    ionoutc.A0, ionoutc.A1, ionoutc.tot, ionoutc.wnt);
+            gui_mvwprintw(LS_FIX, 16, 40, "LEAP SECONDS %d", ionoutc.dtls);
+        } else {
+            gui_mvwprintw(LS_FIX, 13, 40, "Ionospheric data invalid or disabled!");
+        }
         pthread_mutex_unlock(&simulator->gui_lock);
     }
 
