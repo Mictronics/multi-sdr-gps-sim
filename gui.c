@@ -97,7 +97,7 @@ static void show_heading(float degree) {
     wattroff(window[HEADING], COLOR_PAIR(11) | A_BOLD);
 
     wattron(window[HEADING], COLOR_PAIR(13) | A_BOLD);
-    mvwprintw(window[HEADING], 8, 7, "%6.1f", degree); //cputs("�");
+    mvwprintw(window[HEADING], 8, 6, "%6.1f", degree);
     wattroff(window[HEADING], COLOR_PAIR(13) | A_BOLD);
 
     //calculate coordinates
@@ -260,15 +260,14 @@ static void init_windows(void) {
     show_window(window[LS_FIX], "GPS Simulation Status");
     show_window(window[EPHEMERIS], "Test");
     show_window(window[KF_FIX], "Dynamic Position");
-
+    
     ls_show_header();
-    eph_show_header();
     top_panel(panel[TRACK]);
     panel[TOP] = panel[TRACK];
 
     // Keep status window scrolling when adding lines
     scrollok(window[STATUS], TRUE);
-
+    
     /* Update the stacking order.tracking_panel will be on the top*/
     update_panels();
     doupdate();
