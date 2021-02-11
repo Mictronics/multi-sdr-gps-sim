@@ -25,6 +25,11 @@
 #include "gps-sim.h"
 
 /**
+ * Note:
+ * Not all stations provide RINEX data with ionoshere data.
+ */
+
+/**
  * Stations providing Rinex v3 format.
  * 4-characters station ID
  * 9-characters station ID
@@ -34,7 +39,8 @@
 const stations_t stations_v3[] = {
     {"func", "FUNC00PRT", "Funchal"},
     {"flrs", "FLRS00PRT", "Santa Cruz das Flore"},
-    {"pdel", "PDEL00PRT", "PONTA DELGADA"}
+    {"pdel", "PDEL00PRT", "PONTA DELGADA"},
+    {NULL, NULL, NULL} // Always last entry
 };
 
 /**
@@ -42,7 +48,6 @@ const stations_t stations_v3[] = {
  * 4-characters station ID
  * 9-characters station ID
  * Station name
- * Including Ionosphere data in Rinex file
  */
 const stations_t stations_v2[] = {
     {"abmf", "ABMF00GLP", "Aeroport du Raizet"},
@@ -126,6 +131,7 @@ const stations_t stations_v2[] = {
     {"zeck", "ZECK00RUS", "Zelenchukskaya"},
     {"zim2", "ZIM200CHE", "Zimmerwald"},
     {"zimm", "ZIMM00CHE", "Zimmerwald L+T 88"},
+    {NULL, NULL, NULL} // Always last entry
 };
 
 static char rinex_date[21];
@@ -2689,20 +2695,46 @@ void *gps_thread_ep(void *arg) {
         time_t t = time(NULL);
         struct tm *tm = gmtime(&t);
         char* url = malloc(NAME_MAX);
-        const char *station = stations_v2[25].id_v2; // <-- Make this fix station ID an option
+        int station_index = 0;
+        // Use RINEX v2 by default or v3 on request
+        const stations_t *pstation = stations_v2;
+        if (simulator->use_rinex3) {
+            pstation = stations_v3;
+        }
+
+        // Get number of stations available, find index for given one
+        for (int s = 0; pstation[s].id_v2 != NULL; s++) {
+            // Station id given, get index
+            if (simulator->station_id != NULL) {
+                if (strncmp(pstation[s].id_v2, simulator->station_id, 4) == 0 || strncmp(pstation[s].id_v3, simulator->station_id, 9) == 0) {
+                    break;
+                }
+            }
+            station_index += 1;
+        }
+
+        // Pick a random station if none given
+        if (simulator->station_id == NULL) {
+            srand((unsigned int) g0.sec);
+            station_index = rand() % station_index;
+        }
+        // Check that we have a picked a valid station
+        // Take the first one when invalid
+        if (pstation[station_index].id_v2 == NULL) {
+            station_index = 0;
+        }
+
+        gui_status_wprintw(GREEN, "Pulling RINEX v%u from station: %s\n", (simulator->use_rinex3) ? 3 : 2, pstation[station_index].name);
+
         // We fetch data from previous hour because the actual hour is still in progress
         tm->tm_hour -= 1;
         if (tm->tm_hour < 0) {
             tm->tm_hour = 23;
         }
 
-        if (simulator->use_rinex3) {
-            station = stations_v3[0].id_v2;
-        }
-
         // Compose FTP URL
         snprintf(url, NAME_MAX, RINEX_FTP_URL RINEX_FTP_FILE, (simulator->use_rinex3) ? RINEX3_SUBFOLDER : RINEX2_SUBFOLDER,
-                tm->tm_yday + 1, tm->tm_hour, station, tm->tm_yday + 1, 'a' + tm->tm_hour, tm->tm_year - 100);
+                tm->tm_yday + 1, tm->tm_hour, pstation[station_index].id_v2, tm->tm_yday + 1, 'a' + tm->tm_hour, tm->tm_year - 100);
 
         curl_global_init(CURL_GLOBAL_DEFAULT);
         curl = curl_easy_init();
@@ -2729,7 +2761,14 @@ void *gps_thread_ep(void *arg) {
 
         if (res != CURLE_OK) {
             pthread_mutex_lock(&simulator->gui_lock);
-            gui_status_wprintw(RED, "Curl error: %d\n", res);
+            switch (res) {
+                case CURLE_REMOTE_FILE_NOT_FOUND:
+                    gui_status_wprintw(RED, "Curl error: File not found!\n");
+                    break;
+                default:
+                    gui_status_wprintw(RED, "Curl error: %d\n", res);
+                    break;
+            }
             goto end_gps_thread;
         }
     }
@@ -2738,7 +2777,6 @@ void *gps_thread_ep(void *arg) {
         neph = readRinex3(eph, &ionoutc, simulator->nav_file_name);
     } else {
         neph = readRinex2(eph, &ionoutc, simulator->nav_file_name);
-        //neph = readRinexNavAll(eph, &ionoutc, "brdc3540.14n");
     }
 
     if (neph == 0) {

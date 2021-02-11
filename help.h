@@ -37,14 +37,16 @@ static struct argp_option options[] = {
     {"uri", 'U', "uri", 0, "ADLAM-Pluto URI", 1},
     {"network", 'N', "network", 0, "ADLAM-Pluto network IP or hostname (default pluto.local)", 1},
     {"motion", 'm', "name", 0, "User motion file (dynamic mode)", 1},
-    {0, 0, 0, 0, "SDR device types (use with --radio or -r option):", 2},
-    {0, 0, 0, OPTION_DOC, "   none", 2},
-    {0, 0, 0, OPTION_DOC, "   iqfile", 2},
+    {"station", 701, "id", 0, "Use station with given ID for RINEX FTP download (4 or 9 character ID).", 2},
+    {0, 0, 0, OPTION_DOC, "Station is a GPS ground station around the world which provides RINEX hourly updated data. See gps.c for station details. A random station is picked if no ID is given.", 2},
+    {0, 0, 0, 0, "SDR device types (use with --radio or -r option):", 3},
+    {0, 0, 0, OPTION_DOC, "   none", 3},
+    {0, 0, 0, OPTION_DOC, "   iqfile", 3},
 #ifdef ENABLE_HACKRFSDR    
-    {0, 0, 0, OPTION_DOC, "   hackrf", 2},
+    {0, 0, 0, OPTION_DOC, "   hackrf", 3},
 #endif
 #ifdef ENABLE_PLUTOSDR
-    {0, 0, 0, OPTION_DOC, "   plutosdr", 2},
+    {0, 0, 0, OPTION_DOC, "   plutosdr", 3},
 #endif    
     { 0}
 };

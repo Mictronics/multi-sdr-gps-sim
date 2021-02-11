@@ -74,6 +74,7 @@ typedef struct {
     char *sdr_name;
     char *pluto_uri;
     char *pluto_hostname;
+    char *station_id;
     pthread_mutex_t gps_lock;
     pthread_t gps_thread;
     pthread_cond_t gps_init_done; // Condition signals GPS thread is running
