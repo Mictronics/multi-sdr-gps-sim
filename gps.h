@@ -14,7 +14,7 @@
 #define GPS_H
 
 /* For RKT simulation. Higher computational load, but smoother carrier phase.*/
-//#define FLOAT_CARR_PHASE
+#define FLOAT_CARR_PHASE
 
 /* Real-time signal generation */
 #define REAL_TIME_GPS
