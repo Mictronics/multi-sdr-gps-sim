@@ -19,9 +19,6 @@
 /* Real-time signal generation */
 #define REAL_TIME_GPS
 
-/* Real-time signal generation with hackRF */
-#define HACK_GPS
-
 #define RINEX2_FILE_NAME "rinex2.gz"
 #define RINEX3_FILE_NAME "rinex3.gz"
 #define RINEX_FTP_URL "ftp://igs.bkg.bund.de/IGS/"
@@ -94,8 +91,6 @@
 #define SPEED_OF_LIGHT 2.99792458e8
 #define LAMBDA_L1 0.190293672798365
 
-/* GPS L1 Carrier frequency */
-#define CARR_FREQ (1575.42e6)
 /* C/A code frequency */
 #define CODE_FREQ (1.023e6)
 #define CARR_TO_CODE (1.0/1540.0)
