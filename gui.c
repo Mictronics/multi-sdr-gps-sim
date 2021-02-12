@@ -188,8 +188,9 @@ static void show_local(location_t *loc) {
     mvwprintw(window[LOCATION], 1, 0, "Longitude %9.6f deg", loc->lon);
     mvwprintw(window[LOCATION], 2, 0, "Latitude  %9.6f deg", loc->lat);
     mvwprintw(window[LOCATION], 3, 0, "Height    %9.1f m", loc->height);
-    wnoutrefresh(window[LOCATION]);
-    wrefresh(window[TOP]);
+    if (window[TOP] == window[KF_FIX]) {
+        wnoutrefresh(window[LOCATION]);
+    }
 }
 
 static void eph_show_header(void) {
