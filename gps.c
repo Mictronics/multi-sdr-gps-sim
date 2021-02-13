@@ -141,8 +141,6 @@ struct ftp_file {
     FILE *stream;
 };
 
-ephem_t eph[EPHEM_ARRAY_SIZE][MAX_SAT];
-
 const int sinTable512[] = {
     2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44, 47,
     50, 53, 56, 59, 62, 65, 68, 71, 74, 77, 80, 83, 86, 89, 91, 94,
