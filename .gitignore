@@ -30,3 +30,9 @@ nbproject/*
 
 # Rinex files
 *.gz
+
+# Almanac files
+*.sem
+*.sem.txt
+*.yuma
+*.alm
