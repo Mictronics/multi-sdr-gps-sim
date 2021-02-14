@@ -2238,7 +2238,6 @@ void *gps_thread_ep(void *arg) {
     // Allocate user motion array
     double (*xyz)[3] = malloc(sizeof (double[USER_MOTION_SIZE][3]));
     if (xyz == NULL) {
-        pthread_mutex_lock(&simulator->gui_lock);
         gui_status_wprintw(RED, "Failed to allocate user motion memory.\n");
         goto end_gps_thread;
     }
@@ -2279,9 +2278,7 @@ void *gps_thread_ep(void *arg) {
         xyz[iumd][2] = xyz[0][2];
     }
 
-    pthread_mutex_lock(&simulator->gui_lock);
     gui_show_location(&simulator->location);
-    pthread_mutex_unlock(&simulator->gui_lock);
 
     CURL *curl;
     CURLcode res = CURLE_GOT_NOTHING;
@@ -2297,7 +2294,6 @@ void *gps_thread_ep(void *arg) {
     set_thread_name("gps-thread");
 
     if ((simulator->nav_file_name == NULL) && (simulator->use_ftp == false)) {
-        pthread_mutex_lock(&simulator->gui_lock);
         gui_status_wprintw(RED, "GPS ephemeris file is not specified.\n");
         goto end_gps_thread;
     }
@@ -2374,10 +2370,9 @@ void *gps_thread_ep(void *arg) {
         curl_global_cleanup();
 
         if (res != CURLE_OK) {
-            pthread_mutex_lock(&simulator->gui_lock);
             switch (res) {
                 case CURLE_REMOTE_FILE_NOT_FOUND:
-                    gui_status_wprintw(RED, "Curl error: File not found!\n");
+                    gui_status_wprintw(RED, "Curl error: Ephemeris file not found!\n");
                     break;
                 default:
                     gui_status_wprintw(RED, "Curl error: %d\n", res);
@@ -2394,13 +2389,11 @@ void *gps_thread_ep(void *arg) {
     }
 
     if (neph == 0) {
-        pthread_mutex_lock(&simulator->gui_lock);
         gui_status_wprintw(RED, "No ephemeris available.\n");
         goto end_gps_thread;
     }
 
     if (simulator->show_verbose) {
-        pthread_mutex_lock(&simulator->gui_lock);
         if (ionoutc.vflg && ionoutc.enable) {
             gui_mvwprintw(LS_FIX, 13, 40, "ION ALPHA %12.3e %12.3e %12.3e %12.3e",
                     ionoutc.alpha0, ionoutc.alpha1, ionoutc.alpha2, ionoutc.alpha3);
@@ -2412,7 +2405,6 @@ void *gps_thread_ep(void *arg) {
         } else {
             gui_mvwprintw(LS_FIX, 13, 40, "Ionospheric data invalid or disabled!");
         }
-        pthread_mutex_unlock(&simulator->gui_lock);
     }
 
     // Read user motion file if any
@@ -2487,7 +2479,6 @@ void *gps_thread_ep(void *arg) {
             }
         } else {
             if (subGpsTime(g0, gmin) < 0.0 || subGpsTime(gmax, g0) < 0.0) {
-                pthread_mutex_lock(&simulator->gui_lock);
                 gui_status_wprintw(RED, "Invalid start time.\n");
                 gui_status_wprintw(RED, "tmin = %4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)\n",
                         tmin.y, tmin.m, tmin.d, tmin.hh, tmin.mm, tmin.sec,
@@ -2503,7 +2494,6 @@ void *gps_thread_ep(void *arg) {
         simulator->start = tmin;
     }
 
-    pthread_mutex_lock(&simulator->gui_lock);
     gui_mvwprintw(LS_FIX, 8, 40, "RINEX date:      %s", rinex_date);
     gui_mvwprintw(LS_FIX, 9, 40, "Start time:      %4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)",
             simulator->start.y, simulator->start.m, simulator->start.d, simulator->start.hh, simulator->start.mm, simulator->start.sec, g0.week, g0.sec);
@@ -2511,7 +2501,6 @@ void *gps_thread_ep(void *arg) {
         gui_mvwprintw(LS_FIX, 10, 40, "Simulation time: ");
     }
     gui_mvwprintw(LS_FIX, 7, 40, "Duration:        %.1fs", ((double) numd) / 10.0);
-    pthread_mutex_unlock(&simulator->gui_lock);
 
     // Select the current set of ephemerides
     ieph = -1;
@@ -2532,7 +2521,6 @@ void *gps_thread_ep(void *arg) {
     }
 
     if (ieph == -1) {
-        pthread_mutex_lock(&simulator->gui_lock);
         gui_status_wprintw(RED, "No current set of ephemerides has been found.\n");
         goto end_gps_thread;
     }
@@ -2555,7 +2543,6 @@ void *gps_thread_ep(void *arg) {
     // Allocate visible satellites
     allocateChannel(chan, eph[ieph], ionoutc, grx, xyz[0], elvmask);
 
-    pthread_mutex_lock(&simulator->gui_lock);
     for (i = 0; i < MAX_CHAN; i++) {
         if (chan[i].prn > 0) {
             gui_mvwprintw(LS_FIX, start_y++, 1, "%02d %6.1f %5.1f %11.1f %5.1f", chan[i].prn,
@@ -2565,7 +2552,6 @@ void *gps_thread_ep(void *arg) {
         sat_simulated[chan[i].prn] = true;
     }
     gui_mvwprintw(LS_FIX, 3, 40, "Nav: %02d satellites", start_y - 4);
-    pthread_mutex_unlock(&simulator->gui_lock);
 
     // Receiver antenna gain pattern
     for (i = 0; i < 37; i++)
@@ -2752,13 +2738,11 @@ void *gps_thread_ep(void *arg) {
         //
         igrx = (int) (grx.sec * 10.0 + 0.5);
 
-        pthread_mutex_lock(&simulator->gui_lock);
         xyz2llh(xyz[iumd], llh);
         simulator->target.lat = llh[0] * R2D;
         simulator->target.lon = llh[1] * R2D;
         simulator->target.height = llh[2];
         gui_show_target(&simulator->target);
-        pthread_mutex_unlock(&simulator->gui_lock);
 
         if (igrx % 300 == 0) // Every 30 seconds
         {
@@ -2790,7 +2774,6 @@ void *gps_thread_ep(void *arg) {
             allocateChannel(chan, eph[ieph], ionoutc, grx, xyz[0], elvmask);
 
             if (simulator->show_verbose) {
-                pthread_mutex_lock(&simulator->gui_lock);
                 gps2date(&grx, &simulator->start);
                 gui_mvwprintw(LS_FIX, 10, 57, "%4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)",
                         simulator->start.y, simulator->start.m, simulator->start.d, simulator->start.hh, simulator->start.mm, simulator->start.sec, grx.week, grx.sec);
@@ -2808,19 +2791,15 @@ void *gps_thread_ep(void *arg) {
                 }
 
                 gui_mvwprintw(LS_FIX, 3, 40, "Nav: %02d satellites", start_y - 4);
-                pthread_mutex_unlock(&simulator->gui_lock);
             }
         }
         // Update receiver time
         grx = incGpsTime(grx, 0.1);
 
         // Update time counter
-        pthread_mutex_lock(&simulator->gui_lock);
         gui_mvwprintw(LS_FIX, 11, 40, "Elapsed:         %5.1fs", subGpsTime(grx, g0));
-        pthread_mutex_unlock(&simulator->gui_lock);
     }
 
-    pthread_mutex_lock(&simulator->gui_lock);
     gui_status_wprintw(GREEN, "Simulation complete\n");
 
 end_gps_thread:
@@ -2829,7 +2808,6 @@ end_gps_thread:
         free(xyz);
     gui_status_wprintw(RED, "Exit GPS thread\n");
     simulator->gps_thread_exit = true;
-    pthread_mutex_unlock(&simulator->gui_lock);
     pthread_cond_signal(&(simulator->gps_init_done));
     pthread_exit(NULL);
 }

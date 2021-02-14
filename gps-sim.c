@@ -205,7 +205,6 @@ static void simulator_init(void) {
     simulator.sample_size = SC08;
     pthread_cond_init(&simulator.gps_init_done, NULL);
     pthread_mutex_init(&simulator.gps_lock, NULL);
-    pthread_mutex_init(&simulator.gui_lock, NULL);
 }
 
 static void signal_handler(int sig) {
@@ -215,13 +214,11 @@ static void signal_handler(int sig) {
 }
 
 static void cleanup_and_exit(int code) {
-    pthread_mutex_unlock(&simulator.gui_lock); // Just in case
     simulator.gps_thread_exit = true;
     pthread_join(simulator.gps_thread, NULL); /* Wait on GPS read thread exit */
 
     pthread_cond_destroy(&simulator.gps_init_done);
     pthread_mutex_destroy(&simulator.gps_lock);
-    pthread_mutex_destroy(&simulator.gui_lock);
 
     /* Free when pointing to string in heap (strdup allocated when given as run option) */
     free(simulator.nav_file_name);
@@ -289,11 +286,9 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Error: GPS ephemeris file is not specified\n");
         return (EXIT_FAILURE);
     }
-
-    if (gui_init() != 0) {
-        cleanup_and_exit(EXIT_FAILURE);
-    }
-
+    gui_init();
+    // No access to GUI until this point
+   
     if (simulator.interactive_mode && simulator.motion_file_name != NULL) {
         simulator.interactive_mode = false;
         simulator.target.valid = false;
@@ -318,16 +313,12 @@ int main(int argc, char** argv) {
         pthread_mutex_unlock(&(simulator.gps_lock));
 
         if (ret == ETIMEDOUT) {
-            pthread_mutex_lock(&simulator.gui_lock);
             gui_status_wprintw(RED, "Time out waiting for GPS thread. Running?\n");
-            pthread_mutex_unlock(&simulator.gui_lock);
         }
 
         if (!simulator.gps_thread_exit) {
             if (sdr_run() != 0) {
-                pthread_mutex_lock(&simulator.gui_lock);
                 gui_status_wprintw(RED, "Starting SDR streaming failed.\n");
-                pthread_mutex_unlock(&simulator.gui_lock);
                 simulator.gps_thread_exit = true;
             }
         }
@@ -336,7 +327,6 @@ int main(int argc, char** argv) {
     while (!simulator.main_exit) {
         ch = gui_getch();
         if (ch != -1) {
-            pthread_mutex_lock(&simulator.gui_lock);
             switch (ch) {
                 case 'x':
                 case 'X':
@@ -397,7 +387,6 @@ int main(int argc, char** argv) {
                     }
                     break;
             }
-            pthread_mutex_unlock(&simulator.gui_lock);
         }
     }
 

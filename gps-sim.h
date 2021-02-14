@@ -78,7 +78,6 @@ typedef struct {
     pthread_mutex_t gps_lock;
     pthread_t gps_thread;
     pthread_cond_t gps_init_done; // Condition signals GPS thread is running
-    pthread_mutex_t gui_lock; // Mutex to lock access during GUI updates
     location_t location; // Simulator geo location
     target_t target; // Target information
     datetime_t start; // Simulation start time
