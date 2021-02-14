@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
+#include <pthread.h>
 #include <ncurses.h>
 #include <panel.h>
 #include <form.h>
@@ -28,6 +29,8 @@ static int max_y = 0;
 
 static WINDOW *window[12] = {NULL};
 static PANEL *panel[12] = {NULL};
+
+static pthread_mutex_t gui_lock; // Mutex to lock access during GUI updates
 
 static void gui_update() {
     update_panels();
@@ -261,21 +264,23 @@ static void init_windows(void) {
     show_window(window[LS_FIX], "GPS Simulation Status");
     show_window(window[EPHEMERIS], "Test");
     show_window(window[KF_FIX], "Dynamic Position");
-    
+
     ls_show_header();
     top_panel(panel[TRACK]);
     panel[TOP] = panel[TRACK];
 
     // Keep status window scrolling when adding lines
     scrollok(window[STATUS], TRUE);
-    
+
     /* Update the stacking order.tracking_panel will be on the top*/
     update_panels();
     doupdate();
 }
 
-int gui_init(void) {
+void gui_init(void) {
     char ch;
+    pthread_mutex_init(&gui_lock, NULL);
+    pthread_mutex_lock(&gui_lock);
     /* Initialize curses */
     initscr();
     getmaxyx(stdscr, max_y, max_x);
@@ -311,11 +316,12 @@ int gui_init(void) {
     init_pair(14, COLOR_BLACK, COLOR_RED);
 
     init_windows();
-
-    return 0;
+    pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_destroy(void) {
+    pthread_mutex_unlock(&gui_lock); // Just in case
+    pthread_mutex_destroy(&gui_lock);
     delwin(window[TRACK]);
     delwin(window[LS_FIX]);
     delwin(window[KF_FIX]);
@@ -331,6 +337,7 @@ void gui_destroy(void) {
 }
 
 void gui_mvwprintw(window_panel_t w, int y, int x, const char * fmt, ...) {
+    pthread_mutex_lock(&gui_lock);
     va_list args;
     if (wmove(window[w], y, x) == ERR) {
         return;
@@ -341,9 +348,11 @@ void gui_mvwprintw(window_panel_t w, int y, int x, const char * fmt, ...) {
     // Refresh only what is printed on top panel, don't care about background
     // updates.
     wrefresh(window[TOP]);
+    pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_status_wprintw(status_color_t clr, const char * fmt, ...) {
+    pthread_mutex_lock(&gui_lock);
     va_list args;
     va_start(args, fmt);
     if (clr > 0) {
@@ -355,14 +364,17 @@ void gui_status_wprintw(status_color_t clr, const char * fmt, ...) {
     }
     va_end(args);
     wrefresh(window[STATUS]);
+    pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_colorpair(window_panel_t w, unsigned clr, attr_status_t onoff) {
+    pthread_mutex_lock(&gui_lock);
     if (onoff == ON) {
         wattron(window[w], COLOR_PAIR(clr));
     } else {
         wattroff(window[w], COLOR_PAIR(clr));
     }
+    pthread_mutex_unlock(&gui_lock);
 }
 
 int gui_getch(void) {
@@ -376,48 +388,64 @@ int gui_getch(void) {
 }
 
 void gui_top_panel(window_panel_t p) {
+    pthread_mutex_lock(&gui_lock);
     top_panel(panel[p]);
     panel[TOP] = panel[p];
     window[TOP] = window[p];
     // Status is alway the top most panel
     top_panel(panel[STATUS]);
     gui_update();
+    pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_toggle_current_panel(void) {
+    pthread_mutex_lock(&gui_lock);
     panel[TOP] = (PANEL *) panel_userptr(panel[TOP]);
     top_panel(panel[TOP]);
     window[TOP] = panel_window(panel[TOP]);
     // Status is alway the top most panel
     top_panel(panel[STATUS]);
     gui_update();
+    pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_show_info(attr_status_t onoff) {
+    pthread_mutex_lock(&gui_lock);
     if (onoff == ON) {
         show_panel(panel[INFO]);
     } else {
         hide_panel(panel[INFO]);
     }
     gui_update();
+    pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_show_speed(float speed) {
+    pthread_mutex_lock(&gui_lock);
     show_speed(speed);
+    pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_show_heading(float hdg) {
+    pthread_mutex_lock(&gui_lock);
     show_heading(hdg);
+    pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_show_vertical_speed(float vs) {
+    pthread_mutex_lock(&gui_lock);
     show_vertical_speed(vs);
+    pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_show_location(void *l) {
+    pthread_mutex_lock(&gui_lock);
     show_local((location_t *) (l));
+    pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_show_target(void *t) {
+    pthread_mutex_lock(&gui_lock);
     show_target((target_t *) (t));
+    pthread_mutex_unlock(&gui_lock);
 }

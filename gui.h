@@ -58,7 +58,7 @@ typedef enum {
     YELLOW = 5
 } status_color_t;
 
-int gui_init(void);
+void gui_init(void);
 int gui_getch(void);
 void gui_destroy(void);
 void gui_mvwprintw(window_panel_t w, int y, int x, const char * fmt, ...);
