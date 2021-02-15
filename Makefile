@@ -26,7 +26,7 @@ all: gps-sim
 %.o: %.c *.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-gps-sim: fifo.o gps.o gui.o sdr.o gps-sim.o $(SDR_OBJ) $(COMPAT)
+gps-sim: fifo.o almanac.o gps.o gui.o sdr.o gps-sim.o $(SDR_OBJ) $(COMPAT)
 	$(CC) -g -o $@ $^ $(LDFLAGS) $(LIBS) $(LIBS_SDR)
 
 clean:
