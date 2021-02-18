@@ -64,6 +64,7 @@ typedef struct {
     bool enable_tx_amp;
     bool use_rinex3;
     bool time_overwrite;
+    bool almanac_enable;
     int duration;
     int tx_gain;
     int ppb;

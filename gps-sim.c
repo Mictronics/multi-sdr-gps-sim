@@ -162,6 +162,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
         case 700: // --iq16
             simulator.sample_size = SC16;
             break;
+        case 702: // --disable-almanac
+            simulator.almanac_enable = false;
+            break;
         case ARGP_KEY_END:
             if (state->arg_num > 0)
                 /* We use only options but no arguments */
@@ -183,6 +186,7 @@ static void simulator_init(void) {
     simulator.enable_tx_amp = false;
     simulator.use_rinex3 = false;
     simulator.time_overwrite = false;
+    simulator.almanac_enable = true;
     simulator.duration = USER_MOTION_SIZE;
     simulator.tx_gain = 0;
     simulator.ppb = 0;
