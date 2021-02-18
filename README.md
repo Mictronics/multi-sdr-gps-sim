@@ -4,7 +4,7 @@ multi-sdr-gps-sim generates a GPS L1 baseband signal IQ data stream, which is th
 software-defined radio (SDR) platform. Supported at the moment are HackRF, ADLAM-Pluto and binary IQ file output.
 The software interacts with the user through a curses based text user interface (TUI) in terminal.
 
-Project based on [gps-sdr-sim](https://github.com/osqzss/gps-sdr-sim) by Takuji Ebinuma and work of [IvanKor](https://github.com/IvanKor).
+Project based on work of [Takuji Ebinuma](https://github.com/osqzss/) and [IvanKor](https://github.com/IvanKor).
 
 ### Generating the GPS signal
 
@@ -86,27 +86,28 @@ Full SDR support: `make all HACKRFSDR=yes PLUTOSDR=yes`
 ````
 gps-sim [options]
 Options:
---nav-file      -e  <filename> RINEX navigation file for GPS ephemeris (required)
---geo-loc       -l  <location> Latitude, Longitude, Height (static mode) e.g. 35.681298,139.766247,10.0
---start         -s  <date,time> Scenario start time YYYY/MM/DD,hh:mm:ss (use 'now' for actual time)
---gain          -g  <gain> Set TX gain, HackRF: 0-47dB, Pluto: -80-0dB (default 0)
---duration      -d  <seconds> Duration in seconds
---target        -t  <distance,bearing,height> Target distance [m], bearing [°] and height [m]
---ppb           -p  <ppb> Set oscillator error in ppb (default 0)
---radio         -r  <name> Set the SDR device type name (default none)
---uri           -U  <uri> ADLAM-Pluto URI
---network       -N  <network> ADLAM-Pluto network IP or hostname (default pluto.local)
---motion        -m  <name> User motion file (dynamic mode)
---iq16              Set IQ sample size to 16 bit (default 8 bit)
---disable-iono  -I  Disable ionospheric delay for spacecraft scenario
---verbose       -v  Show verbose output and details about simulated channels
---interactive   -i  Use interactive mode
---amplifier     -a  Enable TX amplifier (default OFF)
---use-ftp       -f  Pull actual RINEX navigation file from FTP server
---rinex3        -3  Use RINEX v3 navigation data format
---help          -?  Give this help list
---usage             Give a short usage message
---version       -V  Print program version
+--nav-file          -e  <filename> RINEX navigation file for GPS ephemeris (required)
+--geo-loc           -l  <location> Latitude, Longitude, Height (static mode) e.g. 35.681298,139.766247,10.0
+--start             -s  <date,time> Scenario start time YYYY/MM/DD,hh:mm:ss (use 'now' for actual time)
+--gain              -g  <gain> Set TX gain, HackRF: 0-47dB, Pluto: -80-0dB (default 0)
+--duration          -d  <seconds> Duration in seconds
+--target            -t  <distance,bearing,height> Target distance [m], bearing [°] and height [m]
+--ppb               -p  <ppb> Set oscillator error in ppb (default 0)
+--radio             -r  <name> Set the SDR device type name (default none)
+--uri               -U  <uri> ADLAM-Pluto URI
+--network           -N  <network> ADLAM-Pluto network IP or hostname (default pluto.local)
+--motion            -m  <name> User motion file (dynamic mode)
+--iq16                  Set IQ sample size to 16 bit (default 8 bit)
+--disable-iono      -I  Disable ionospheric delay for spacecraft scenario
+--verbose           -v  Show verbose output and details about simulated channels
+--interactive       -i  Use interactive mode
+--amplifier         -a  Enable TX amplifier (default OFF)
+--use-ftp           -f  Pull actual RINEX navigation file from FTP server
+--rinex3            -3  Use RINEX v3 navigation data format
+--disable-almanac       Disable transmission of almanac information
+--help              -?  Give this help list
+--usage                 Give a short usage message
+--version           -V  Print program version
 
 SDR device types (use with --radio or -r option):
     none
