@@ -13,44 +13,48 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <curl/curl.h>
-#include "gui.h"
 #include "gps-sim.h"
-#include "gps.h"
 #include "almanac.h"
 
-almanac_gps_t almanac_gps;
+static almanac_gps_t almanac_gps;
 
 struct sem_file {
     const char *filename;
     FILE *stream;
 };
 
-static void almanac_init(void) {
+/**
+ * Initialize empty almanac.
+ */
+almanac_gps_t* almanac_init(void) {
     almanac_gps.valid = 0;
     almanac_prn_t* a = NULL;
-    for (int prn = 0; prn < 32; prn++) {
-        a = &almanac_gps.prn[prn];
+    for (int prn = 0; prn < MAX_SAT; prn++) {
+        a = &almanac_gps.sv[prn];
         a->ura = 0;
         a->health = 0;
         a->config_code = 0;
-        a->week = 0;
-        a->prn = 0;
+        a->svid = 0;
         a->svn = 0;
         a->valid = 0;
-        a->toa = 0;
+        a->toa.sec = 0.0;
+        a->toa.week = 0;
         a->e = 0.0;
         a->delta_i = 0.0;
         a->omegadot = 0.0;
         a->sqrta = 0.0;
         a->omega0 = 0.0;
-        a->w = 0.0;
+        a->aop = 0.0;
         a->m0 = 0.0;
         a->af0 = 0.0;
         a->af1 = 0.0;
     }
+    return &almanac_gps;
 }
 
+/**
+ * Curl file writer callback.
+ */
 static size_t fwrite_sem(void *buffer, size_t size, size_t nmemb, void *stream) {
     struct sem_file *out = (struct sem_file *) stream;
     if (out && !out->stream) {
@@ -62,100 +66,126 @@ static size_t fwrite_sem(void *buffer, size_t size, size_t nmemb, void *stream) 
     return fwrite(buffer, size, nmemb, out->stream);
 }
 
-almanac_gps_t* almanac_read_file(void) {
-    int l;
-    char buf[64];
-    unsigned j, n, week, toa, ui;
-    double dbl;
-    FILE *fp = fopen("almanac.sem", "r");
+/**
+ * Read almanac from local file.
+ * sem format expected.
+ */
+CURLcode almanac_read_file(void) {
+    char buf[100];
+    char title[24];
+    char *pbuf;
+    unsigned int n, week, sec, id;
+    FILE *fp = fopen("almanac.sem", "rt");
     almanac_prn_t* a = NULL;
 
+    // Start with empty almanac
     almanac_init();
 
     if (!fp) {
-        return &almanac_gps;
+        return CURLE_READ_ERROR;
     }
-    l = fscanf(fp, "%u", &n);
-    if (l != 1) goto error;
-    l = fscanf(fp, "%s", buf);
-    if (l != 1) goto error;
-    l = fscanf(fp, "%u", &week);
-    if (l != 1) goto error;
-    l = fscanf(fp, "%u", &toa);
-    if (l != 1) goto error;
+
+    pbuf = fgets(buf, sizeof (buf), fp);
+    if (pbuf == NULL || sscanf(buf, "%u %24s", &n, title) != 2) goto error;
+
+    pbuf = fgets(buf, sizeof (buf), fp);
+    if (pbuf == NULL || sscanf(buf, "%u %u", &week, &sec) != 2) goto error;
 
     n -= 1; // PRN in file counts 1-32, array counts 0-31
     if (n > 31) n = 31; // Max 32 PRN's to read (0-31)
 
-    for (j = 1; j <= n; j++) {
-        int prn;
-        l = fscanf(fp, "%u", &ui);
-        if (l != 1) goto error;
-        prn = (unsigned short) ui;
+    for (unsigned int j = 0; j <= n; j++) {
+        pbuf = fgets(buf, sizeof (buf), fp);
+        if (pbuf == NULL) goto error;
+        // Check and skip blank line
+        if (buf[0] == '\n' || buf[0] == '\r') {
+            pbuf = fgets(buf, sizeof (buf), fp);
+            if (pbuf == NULL) goto error;
+        }
 
-        a = &almanac_gps.prn[prn];
+        if (sscanf(buf, "%u", &id) != 1) goto error;
+        if (id == 0) id = 1;
+        if (id > 32) id = 32;
 
-        a->prn = (unsigned short) prn;
-        a->week = (unsigned short) week;
-        a->toa = (unsigned int) toa;
+        a = &almanac_gps.sv[id - 1];
 
-        l = fscanf(fp, "%u", &ui);
-        if (l != 1) goto error;
-        a->svn = (unsigned short) ui;
-        l = fscanf(fp, "%u", &ui);
-        if (l != 1) goto error;
-        a->ura = (unsigned char) ui;
-        l = fscanf(fp, "%lf", &dbl);
-        if (l != 1) goto error;
-        a->e = dbl;
-        l = fscanf(fp, "%lf", &dbl);
-        if (l != 1) goto error;
-        a->delta_i = dbl;
-        a->delta_i = (0.30 + a->delta_i) * PI;
-        l = fscanf(fp, "%lf", &dbl);
-        if (l != 1) goto error;
-        a->omegadot = dbl * PI;
-        l = fscanf(fp, "%lf", &dbl);
-        if (l != 1) goto error;
-        a->sqrta = dbl;
-        l = fscanf(fp, "%lf", &dbl);
-        if (l != 1) goto error;
-        a->omega0 = dbl * PI;
-        l = fscanf(fp, "%lf", &dbl);
-        if (l != 1) goto error;
-        a->w = dbl * PI;
-        l = fscanf(fp, "%lf", &dbl);
-        if (l != 1) goto error;
-        a->m0 = dbl * PI;
-        l = fscanf(fp, "%lf", &dbl);
-        if (l != 1) goto error;
-        a->af0 = dbl;
-        l = fscanf(fp, "%lf", &dbl);
-        if (l != 1) goto error;
-        a->af1 = dbl;
+        a->svid = (unsigned short) id;
 
-        l = fscanf(fp, "%u", &ui);
-        if (l != 1) goto error;
-        a->health = (unsigned char) ui;
-        l = fscanf(fp, "%u", &ui);
-        if (l != 1) goto error;
-        a->config_code = (unsigned char) ui;
-        a->week &= 0xFF;
+        // SVN is optional, could be a blank line
+        pbuf = fgets(buf, sizeof (buf), fp);
+        if (pbuf == NULL) goto error;
+        if (buf[0] == '\n' || buf[0] == '\r') {
+            a->svn = 0;
+        } else {
+            if (sscanf(buf, "%hu", &a->svn) != 1) goto error;
+        }
+
+        pbuf = fgets(buf, sizeof (buf), fp);
+        if (pbuf == NULL) goto error;
+        if (sscanf(buf, "%hhu", &a->ura) != 1) goto error;
+        if (a->ura > 15) a->ura = 15;
+
+        pbuf = fgets(buf, sizeof (buf), fp);
+        if (pbuf == NULL) goto error;
+        if (sscanf(buf, "%lf %lf %lf", &a->e, &a->delta_i, &a->omegadot) != 3) goto error;
+
+        pbuf = fgets(buf, sizeof (buf), fp);
+        if (pbuf == NULL) goto error;
+        if (sscanf(buf, "%lf %lf %lf", &a->sqrta, &a->omega0, &a->aop) != 3) goto error;
+
+        pbuf = fgets(buf, sizeof (buf), fp);
+        if (pbuf == NULL) goto error;
+        if (sscanf(buf, "%lf %lf %lf", &a->m0, &a->af0, &a->af1) != 3) goto error;
+
+        pbuf = fgets(buf, sizeof (buf), fp);
+        if (pbuf == NULL) goto error;
+        if (sscanf(buf, "%hhu", &a->health) != 1) goto error;
+        if (a->health > 63) a->health = 63;
+
+        pbuf = fgets(buf, sizeof (buf), fp);
+        if (pbuf == NULL) goto error;
+        if (sscanf(buf, "%hhu", &a->config_code) != 1) goto error;
+        if (a->config_code > 15) a->config_code = 15;
+
+        /**
+         * ublox u-center software provides the full GPS week number whereas Celestrak follows
+         * IC-GPS-200L, p. 116, 20.3.3.5.1.5 Almanac Reference Week:
+         * The WNa term consists of eight bits which shall be a modulo 256 binary
+         * representation of the GPS week number...
+         * Celestrak almanac files use a modulo 256 week number in file name.
+         * See https://celestrak.com/GPS/almanac/SEM/2021/
+         */
+        a->toa.week = (int) week % 256;
+        a->toa.sec = (double) sec;
+        // GPS week rollover
+        a->toa.week += 2048;
         a->valid = 1;
+        almanac_gps.valid = 1; // We have at least one valid record
     }
     fclose(fp);
-    almanac_gps.valid = 1;
-    return &almanac_gps;
+    return CURLE_OK;
 
 error:
+    if (!feof(fp)) {
+        // Not end of file, something wrong
+        // Drop all parsed almanac data on error
+        almanac_init();
+    }
+    /**
+     * If this is the end of file we may read less records than what 
+     * field "number of records" announced.
+     * Found this happening when saving almanac.sem in ublox u-center software.
+     */
     fclose(fp);
-    gui_status_wprintw(RED, "Failed to read file almanac.sem!\n");
-    // Drop all parsed almanac data on error
-    almanac_init();
-    return &almanac_gps;
+    return CURLE_READ_ERROR;
 }
 
-almanac_gps_t* almanac_download(void) {
+/**
+ * Read almanac from online source.
+ * sem format expected.
+ *  
+ */
+CURLcode almanac_download(void) {
     CURL *curl;
     CURLcode res = CURLE_GOT_NOTHING;
     struct sem_file sem = {
@@ -169,11 +199,7 @@ almanac_gps_t* almanac_download(void) {
         curl_easy_setopt(curl, CURLOPT_URL, ALMANAC_DOWNLOAD_SEM_URL);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, fwrite_sem);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sem);
-        if (0) {
-            curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-        } else {
-            curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
-        }
+        curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
         res = curl_easy_perform(curl);
         curl_easy_cleanup(curl);
     }
@@ -184,20 +210,8 @@ almanac_gps_t* almanac_download(void) {
     curl_global_cleanup();
 
     if (res != CURLE_OK) {
-        switch (res) {
-            case CURLE_REMOTE_FILE_NOT_FOUND:
-                gui_status_wprintw(RED, "Curl error: Almanac file not found!\n");
-                break;
-            default:
-                gui_status_wprintw(RED, "Curl error: %d\n", res);
-                break;
-        }
-        return NULL;
+        return res;
     }
 
-    return almanac_read_file();
-}
-
-bool almanac_get_live(void) {
-    return false;
+    return (almanac_read_file());
 }
