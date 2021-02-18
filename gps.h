@@ -51,6 +51,9 @@
 /* Number of words */
 #define N_DWRD ((N_SBF+1)*N_DWRD_SBF) // Subframe word buffer size
 
+#define N_SBF_PAGE (3+2*25) // Subframes 1 to 3 and 25 pages of subframes 4 and 5
+#define MAX_PAGE (25)
+
 /* C/A code sequence length */
 #define CA_SEQ_LEN (1023)
 
@@ -123,6 +126,12 @@
 #define PB4 0x5763e680
 #define PB5 0x6bb1f340
 #define PB6 0x8b7a89c0
+
+/*
+ * The almanac message for any dummy SVs shall contain alternating ones and zeros
+ * with valid parity. (IS-GPS-200L, p.111, 20.3.3.5.1.2)
+ */
+#define EMPTY_WORD 0xaaaaaaaaUL 
 
 /* Structure representing GPS time */
 typedef struct {
@@ -214,8 +223,9 @@ typedef struct {
 #endif
     double code_phase; /* Code phase */
     gpstime_t g0; /* GPS time at start */
-    unsigned long sbf[5][N_DWRD_SBF]; /* current subframe */
-    unsigned long dwrd[N_DWRD]; /* Data words of sub-frame */
+	unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF]; /*!< current subframe */
+	unsigned long dwrd[N_DWRD]; /*!< Data words of sub-frame */
+	int ipage;
     int iword; /* initial word */
     int ibit; /* initial bit */
     int icode; /* initial code */

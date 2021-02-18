@@ -22,6 +22,7 @@
 #include "sdr.h"
 #include "gui.h"
 #include "fifo.h"
+#include "almanac.h"
 #include "gps-sim.h"
 
 /**
@@ -212,11 +213,24 @@ const int cosTable512[] = {
 };
 
 // Receiver antenna attenuation in dB for boresight angle = 0:5:180 [deg]
-double ant_pat_db[37] = {
+const double ant_pat_db[37] = {
     0.00, 0.00, 0.22, 0.44, 0.67, 1.11, 1.56, 2.00, 2.44, 2.89, 3.56, 4.22,
     4.89, 5.56, 6.22, 6.89, 7.56, 8.22, 8.89, 9.78, 10.67, 11.56, 12.44, 13.33,
     14.44, 15.56, 16.67, 17.78, 18.89, 20.00, 21.33, 22.67, 24.00, 25.56, 27.33, 29.33,
     31.56
+};
+// Page number to SVID conversion for subframe 4&5
+// See IS-GPS-200L, p.110, table 20-V
+const unsigned long sbf4_svId[25] = {
+    57UL, 0UL, 0UL, 0UL, 0UL, 57UL, 0UL, 0UL, 0UL, 0UL,
+    57UL, 62UL, 52UL, 53UL, 54UL, 57UL, 55UL, 56UL, 58UL,
+    59UL, 57UL, 60UL, 61UL, 62UL, 63UL
+};
+
+const unsigned long sbf5_svId[25] = {
+    0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL,
+    0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL,
+    0UL, 0UL, 0UL, 0UL, 51UL
 };
 
 static int allocatedSat[MAX_SAT];
@@ -600,8 +614,7 @@ static void satpos(ephem_t eph, gpstime_t g, double *pos, double *vel, double *c
  * eph Ephemeris of given SV
  * sbf Array of five sub-frames, 10 long words each
  */
-
-static void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, unsigned long sbf[5][N_DWRD_SBF]) {
+void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *alm, unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF]) {
     unsigned long wn;
     unsigned long toe;
     unsigned long toc;
@@ -617,10 +630,10 @@ static void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, unsigned long sb
     unsigned long ecc;
     unsigned long sqrta;
     long m0;
-    long omg0;
+    long omega0;
     long inc0;
     long aop;
-    long omgdot;
+    long omegadot;
     long idot;
     long af0;
     long af1;
@@ -628,13 +641,7 @@ static void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, unsigned long sb
     long tgd;
 
     unsigned long ura = 0UL;
-    unsigned long code = 1UL;
-    unsigned long svh = 0UL;
-    unsigned long flag = 0UL;
-    unsigned long fit = 0UL;
     unsigned long dataId = 1UL;
-    unsigned long sbf4_page25_svId = 63UL;
-    unsigned long sbf5_page25_svId = 51UL;
 
     unsigned long wna;
     unsigned long toa;
@@ -644,7 +651,10 @@ static void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, unsigned long sb
     signed long A0, A1;
     signed long dtls, dtlsf;
     unsigned long tot, wnt, wnlsf, dn;
-    unsigned long sbf4_page18_svId = 56UL;
+
+    int sv, i;
+    unsigned long svId;
+    signed long delta_i; // Relative to i0 = 0.30 semicircles
 
     // FIXED: This has to be the "transmission" week number, not for the ephemeris reference time
     //wn = (unsigned long)(eph.toe.week%1024);
@@ -663,22 +673,15 @@ static void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, unsigned long sb
     ecc = (unsigned long) (eph.ecc / POW2_M33);
     sqrta = (unsigned long) (eph.sqrta / POW2_M19);
     m0 = (long) (eph.m0 / POW2_M31 / PI);
-    omg0 = (long) (eph.omg0 / POW2_M31 / PI);
+    omega0 = (long) (eph.omg0 / POW2_M31 / PI);
     inc0 = (long) (eph.inc0 / POW2_M31 / PI);
     aop = (long) (eph.aop / POW2_M31 / PI);
-    omgdot = (long) (eph.omgdot / POW2_M43 / PI);
+    omegadot = (long) (eph.omgdot / POW2_M43 / PI);
     idot = (long) (eph.idot / POW2_M43 / PI);
     af0 = (long) (eph.af0 / POW2_M31);
     af1 = (long) (eph.af1 / POW2_M43);
     af2 = (long) (eph.af2 / POW2_M55);
     tgd = (long) (eph.tgd / POW2_M31);
-    svh = (unsigned long) (eph.svh);
-    code = (unsigned long) (eph.code);
-    flag = (unsigned long) (eph.flag);
-    fit = (unsigned long) (eph.fit);
-
-    wna = (unsigned long) (eph.toe.week % 256);
-    toa = (unsigned long) (eph.toe.sec / 4096.0);
 
     alpha0 = (signed long) round(ionoutc.alpha0 / POW2_M30);
     alpha1 = (signed long) round(ionoutc.alpha1 / POW2_M27);
@@ -701,27 +704,10 @@ static void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, unsigned long sb
     dtlsf = 18;
 
     // Subframe 1
-    /*
-     * Data flag for L2 P-code 	Sub 1, word 4, bit 1
-     * Codes on L2 channel 	Sub 1, word 3, bits 11-12
-     * Anti-spoof flag:	Sub 1-5, HOW, bit 19
-     * Y-code on: from ephemeris
-     * SV health: from ephemeris 	Sub 1, word 3, bits 17-22
-     * Fit interval flag 	Sub 2, word 10, bit 17
-     * URA: User Range Accuracy 	Sub 1, word 3, bits 13-16
-     * URA may be worse than indicated Block I: Momentum Dump flag 	Sub 1-5, HOW, bit 18
-     * SV Configuration: SV is Block I or Block II 	Sub 4, page 25, word and bit depends on SV
-     * Anti-spoof flag: Y-code on 	Sub 4, page 25, word and bit depends on SV
-     * 
-     * If the reported URA (ura) is 10 = 256m URE, then Rx-Networks recommend that
-     * the ephemeris should not be used for Navigation.
-     * Although it could be de-weighted and used for Pre-Positioning, the
-     * almanac is probably a better bet so ignore this ephemeris.
-     */
     sbf[0][0] = 0x8B0000UL << 6;
     sbf[0][1] = 0x1UL << 8;
-    sbf[0][2] = ((wn & 0x3FFUL) << 20) | ((code & 0x3UL) << 18) | ((ura & 0xFUL) << 14) | ((svh & 0x3FUL) << 8) | (((iodc >> 8)&0x3UL) << 6);
-    sbf[0][3] = 0UL | ((flag & 0x1UL) << (23 + 6)); //L2 P data flag
+    sbf[0][2] = ((wn & 0x3FFUL) << 20) | (ura << 14) | (((iodc >> 8)&0x3UL) << 6);
+    sbf[0][3] = 0UL;
     sbf[0][4] = 0UL;
     sbf[0][5] = 0UL;
     sbf[0][6] = (tgd & 0xFFUL) << 6;
@@ -740,60 +726,161 @@ static void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, unsigned long sb
     sbf[1][7] = ((cus & 0xFFFFUL) << 14) | (((sqrta >> 24)&0xFFUL) << 6);
     sbf[1][8] = (sqrta & 0xFFFFFFUL) << 6;
     sbf[1][9] = (toe & 0xFFFFUL) << 14;
-    sbf[1][9] = ((toe & 0xFFFFUL) << 14) | ((fit & 0x1UL) << 13);
 
     // Subframe 3
     sbf[2][0] = 0x8B0000UL << 6;
     sbf[2][1] = 0x3UL << 8;
-    sbf[2][2] = ((cic & 0xFFFFUL) << 14) | (((omg0 >> 24)&0xFFUL) << 6);
-    sbf[2][3] = (omg0 & 0xFFFFFFUL) << 6;
+    sbf[2][2] = ((cic & 0xFFFFUL) << 14) | (((omega0 >> 24)&0xFFUL) << 6);
+    sbf[2][3] = (omega0 & 0xFFFFFFUL) << 6;
     sbf[2][4] = ((cis & 0xFFFFUL) << 14) | (((inc0 >> 24)&0xFFUL) << 6);
     sbf[2][5] = (inc0 & 0xFFFFFFUL) << 6;
     sbf[2][6] = ((crc & 0xFFFFUL) << 14) | (((aop >> 24)&0xFFUL) << 6);
     sbf[2][7] = (aop & 0xFFFFFFUL) << 6;
-    sbf[2][8] = (omgdot & 0xFFFFFFUL) << 6;
+    sbf[2][8] = (omegadot & 0xFFFFFFUL) << 6;
     sbf[2][9] = ((iode & 0xFFUL) << 22) | ((idot & 0x3FFFUL) << 8);
 
-    if (ionoutc.vflg == true) {
-        // Subframe 4, page 18
-        sbf[3][0] = 0x8B0000UL << 6;
-        sbf[3][1] = 0x4UL << 8;
-        sbf[3][2] = (dataId << 28) | (sbf4_page18_svId << 22) | ((alpha0 & 0xFFUL) << 14) | ((alpha1 & 0xFFUL) << 6);
-        sbf[3][3] = ((alpha2 & 0xFFUL) << 22) | ((alpha3 & 0xFFUL) << 14) | ((beta0 & 0xFFUL) << 6);
-        sbf[3][4] = ((beta1 & 0xFFUL) << 22) | ((beta2 & 0xFFUL) << 14) | ((beta3 & 0xFFUL) << 6);
-        sbf[3][5] = (A1 & 0xFFFFFFUL) << 6;
-        sbf[3][6] = ((A0 >> 8)&0xFFFFFFUL) << 6;
-        sbf[3][7] = ((A0 & 0xFFUL) << 22) | ((tot & 0xFFUL) << 14) | ((wnt & 0xFFUL) << 6);
-        sbf[3][8] = ((dtls & 0xFFUL) << 22) | ((wnlsf & 0xFFUL) << 14) | ((dn & 0xFFUL) << 6);
-        sbf[3][9] = (dtlsf & 0xFFUL) << 22;
+    // Empty all the pages of subframes 4 and 5
+    for (i = 0; i < 25; i++) {
+        svId = 0UL; // Dummy SV
+        //svId = sbf4_svId[i];
 
-    } else {
-        // Subframe 4, page 25
-        sbf[3][0] = 0x8B0000UL << 6;
-        sbf[3][1] = 0x4UL << 8;
-        sbf[3][2] = (dataId << 28) | (sbf4_page25_svId << 22);
-        sbf[3][3] = 0UL;
-        sbf[3][4] = 0UL;
-        sbf[3][5] = 0UL;
-        sbf[3][6] = 0UL;
-        sbf[3][7] = 0UL;
-        sbf[3][8] = 0UL;
-        sbf[3][9] = 0UL;
+        sbf[3 + i * 2][0] = 0x8B0000UL << 6; // Preamble for TLM
+        sbf[3 + i * 2][1] = 0x4UL << 8; // Subframe ID for HOW
+        sbf[3 + i * 2][2] = (dataId << 28) | (svId << 22) | ((EMPTY_WORD & 0xFFFFUL) << 6);
+        sbf[3 + i * 2][3] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+        sbf[3 + i * 2][4] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+        sbf[3 + i * 2][5] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+        sbf[3 + i * 2][6] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+        sbf[3 + i * 2][7] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+        sbf[3 + i * 2][8] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+        sbf[3 + i * 2][9] = (EMPTY_WORD & 0x3FFFFFUL) << 8;
+
+        //svId = sbf5_svId[i];
+
+        sbf[4 + i * 2][0] = 0x8B0000UL << 6; // Preamble for TLM
+        sbf[4 + i * 2][1] = 0x5UL << 8; // Subframe ID for HOW
+        sbf[4 + i * 2][2] = (dataId << 28) | (svId << 22) | ((EMPTY_WORD & 0xFFFFUL) << 6);
+        sbf[4 + i * 2][3] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+        sbf[4 + i * 2][4] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+        sbf[4 + i * 2][5] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+        sbf[4 + i * 2][6] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+        sbf[4 + i * 2][7] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+        sbf[4 + i * 2][8] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+        sbf[4 + i * 2][9] = (EMPTY_WORD & 0x3FFFFFUL) << 8;
     }
 
-    // Subframe 5, page 25
-    sbf[4][0] = 0x8B0000UL << 6;
-    sbf[4][1] = 0x5UL << 8;
-    sbf[4][2] = (dataId << 28) | (sbf5_page25_svId << 22) | ((toa & 0xFFUL) << 14) | ((wna & 0xFFUL) << 6);
-    sbf[4][3] = 0UL;
-    sbf[4][4] = 0UL;
-    sbf[4][5] = 0UL;
-    sbf[4][6] = 0UL;
-    sbf[4][7] = 0UL;
-    sbf[4][8] = 0UL;
-    sbf[4][9] = 0UL;
+    // Subframe 4, pages 2-5 and 7-10: almanac data for PRN 25 through 32
+    for (sv = 24; sv < MAX_SAT; sv++) {
+        if (sv >= 24 && sv <= 27) // PRN 25-28
+            i = sv - 23; // Pages 2-5 (i = 1-4)
+        else if (sv >= 28 && sv < MAX_SAT) // PRN 29-32
+            i = sv - 22; // Page 7-10 (i = 6-9)
 
-    return;
+        if (alm->sv[sv].valid != 0) {
+            svId = (unsigned long) (sv + 1);
+            ecc = (unsigned long) (alm->sv[sv].e / POW2_M21);
+            toa = (unsigned long) (alm->sv[sv].toa.sec / POW2_12);
+            delta_i = (signed long) ((alm->sv[sv].delta_i / PI - 0.3) / POW2_M19);
+            omegadot = (signed long) (alm->sv[sv].omegadot / PI / POW2_M38);
+            sqrta = (unsigned long) (alm->sv[sv].sqrta / POW2_M11);
+            omega0 = (signed long) (alm->sv[sv].omega0 / PI / POW2_M23);
+            aop = (signed long) (alm->sv[sv].aop / PI / POW2_M23);
+            m0 = (signed long) (alm->sv[sv].m0 / PI / POW2_M23);
+            af0 = (signed long) (alm->sv[sv].af0 / POW2_M20);
+            af1 = (signed long) (alm->sv[sv].af1 / POW2_M38);
+
+            sbf[3 + i * 2][0] = 0x8B0000UL << 6; // Preamble for TLM
+            sbf[3 + i * 2][1] = 0x4UL << 8; // Subframe ID for HOW
+            sbf[3 + i * 2][2] = (dataId << 28) | (svId << 22) | ((ecc & 0xFFFFUL) << 6);
+            sbf[3 + i * 2][3] = ((toa & 0xFFUL) << 22) | ((delta_i & 0xFFFFUL) << 6);
+            sbf[3 + i * 2][4] = ((omegadot & 0xFFFFUL) << 14); // SV HEALTH = 000 (ALL DATA OK)
+            sbf[3 + i * 2][5] = ((sqrta & 0xFFFFFFUL) << 6);
+            sbf[3 + i * 2][6] = ((omega0 & 0xFFFFFFUL) << 6);
+            sbf[3 + i * 2][7] = ((aop & 0xFFFFFFUL) << 6);
+            sbf[3 + i * 2][8] = ((m0 & 0xFFFFFFUL) << 6);
+            sbf[3 + i * 2][9] = ((af0 & 0x7F8UL) << 19) | ((af1 & 0x7FFUL) << 11) | ((af0 & 0x7UL) << 8);
+        }
+    }
+
+    // Subframe 4, page 18: ionospheric and UTC data
+    if (ionoutc.vflg == true) {
+        sbf[3 + 17 * 2][0] = 0x8B0000UL << 6;
+        sbf[3 + 17 * 2][1] = 0x4UL << 8;
+        sbf[3 + 17 * 2][2] = (dataId << 28) | (sbf4_svId[17] << 22) | ((alpha0 & 0xFFUL) << 14) | ((alpha1 & 0xFFUL) << 6);
+        sbf[3 + 17 * 2][3] = ((alpha2 & 0xFFUL) << 22) | ((alpha3 & 0xFFUL) << 14) | ((beta0 & 0xFFUL) << 6);
+        sbf[3 + 17 * 2][4] = ((beta1 & 0xFFUL) << 22) | ((beta2 & 0xFFUL) << 14) | ((beta3 & 0xFFUL) << 6);
+        sbf[3 + 17 * 2][5] = (A1 & 0xFFFFFFUL) << 6;
+        sbf[3 + 17 * 2][6] = ((A0 >> 8)&0xFFFFFFUL) << 6;
+        sbf[3 + 17 * 2][7] = ((A0 & 0xFFUL) << 22) | ((tot & 0xFFUL) << 14) | ((wnt & 0xFFUL) << 6);
+        sbf[3 + 17 * 2][8] = ((dtls & 0xFFUL) << 22) | ((wnlsf & 0xFFUL) << 14) | ((dn & 0xFFUL) << 6);
+        sbf[3 + 17 * 2][9] = (dtlsf & 0xFFUL) << 22;
+    }
+
+    // Subframe 4, page 25: SV health data for PRN 25 through 32
+    sbf[3 + 24 * 2][0] = 0x8B0000UL << 6;
+    sbf[3 + 24 * 2][1] = 0x4UL << 8;
+    sbf[3 + 24 * 2][2] = (dataId << 28) | (sbf4_svId[24] << 22);
+    sbf[3 + 24 * 2][3] = 0UL;
+    sbf[3 + 24 * 2][4] = 0UL;
+    sbf[3 + 24 * 2][5] = 0UL;
+    sbf[3 + 24 * 2][6] = 0UL;
+    sbf[3 + 24 * 2][7] = 0UL;
+    sbf[3 + 24 * 2][8] = 0UL;
+    sbf[3 + 24 * 2][9] = 0UL;
+
+    // Subframe 5, page 1-24: almanac data for PRN 1 through 24
+    for (sv = 0; sv < 24; sv++) {
+        i = sv;
+
+        if (alm->sv[sv].svid != 0) {
+            svId = (unsigned long) (sv + 1);
+            ecc = (unsigned long) (alm->sv[sv].e / POW2_M21);
+            toa = (unsigned long) (alm->sv[sv].toa.sec / 4096.0);
+            delta_i = (signed long) ((alm->sv[sv].delta_i / PI - 0.3) / POW2_M19);
+            omegadot = (signed long) (alm->sv[sv].omegadot / PI / POW2_M38);
+            sqrta = (unsigned long) (alm->sv[sv].sqrta / POW2_M11);
+            omega0 = (signed long) (alm->sv[sv].omega0 / PI / POW2_M23);
+            aop = (signed long) (alm->sv[sv].aop / PI / POW2_M23);
+            m0 = (signed long) (alm->sv[sv].m0 / PI / POW2_M23);
+            af0 = (signed long) (alm->sv[sv].af0 / POW2_M20);
+            af1 = (signed long) (alm->sv[sv].af1 / POW2_M38);
+
+            sbf[4 + i * 2][0] = 0x8B0000UL << 6; // Preamble
+            sbf[4 + i * 2][1] = 0x5UL << 8; // Subframe ID
+            sbf[4 + i * 2][2] = (dataId << 28) | (svId << 22) | ((ecc & 0xFFFFUL) << 6);
+            sbf[4 + i * 2][3] = ((toa & 0xFFUL) << 22) | ((delta_i & 0xFFFFUL) << 6);
+            sbf[4 + i * 2][4] = ((omegadot & 0xFFFFUL) << 14); // SV HEALTH = 000 (ALL DATA OK)
+            sbf[4 + i * 2][5] = ((sqrta & 0xFFFFFFUL) << 6);
+            sbf[4 + i * 2][6] = ((omega0 & 0xFFFFFFUL) << 6);
+            sbf[4 + i * 2][7] = ((aop & 0xFFFFFFUL) << 6);
+            sbf[4 + i * 2][8] = ((m0 & 0xFFFFFFUL) << 6);
+            sbf[4 + i * 2][9] = ((af0 & 0x7F8UL) << 19) | ((af1 & 0x7FFUL) << 11) | ((af0 & 0x7UL) << 8);
+        }
+    }
+
+    // Subframe 5, page 25: SV health data for PRN 1 through 24
+    wna = (unsigned long) (eph.toe.week % 256);
+    toa = (unsigned long) (eph.toe.sec / 4096.0);
+
+    for (sv = 0; sv < MAX_SAT; sv++) {
+        if (alm->sv[sv].svid != 0) // Valid almanac is availabe
+        {
+            wna = (unsigned long) (alm->sv[sv].toa.week % 256);
+            toa = (unsigned long) (alm->sv[sv].toa.sec / 4096.0);
+            break;
+        }
+    }
+
+    sbf[4 + 24 * 2][0] = 0x8B0000UL << 6;
+    sbf[4 + 24 * 2][1] = 0x5UL << 8;
+    sbf[4 + 24 * 2][2] = (dataId << 28) | (sbf5_svId[24] << 22) | ((toa & 0xFFUL) << 14) | ((wna & 0xFFUL) << 6);
+    sbf[4 + 24 * 2][3] = 0UL;
+    sbf[4 + 24 * 2][4] = 0UL;
+    sbf[4 + 24 * 2][5] = 0UL;
+    sbf[4 + 24 * 2][6] = 0UL;
+    sbf[4 + 24 * 2][7] = 0UL;
+    sbf[4 + 24 * 2][8] = 0UL;
+    sbf[4 + 24 * 2][9] = 0UL;
 }
 
 /* Count number of bits set to 1
@@ -911,7 +998,6 @@ static bool validate_parityN(unsigned int W) {
         gui_status_wprintw(RED, "%d-%u ", (W & 0x3f), p);
     }
     return ((W & 0x3f) == p);
-
 };
 
 /* Compute the Checksum for one given word of a subframe
@@ -1937,8 +2023,6 @@ static void computeRange(range_t *rho, ephem_t eph, ionoutc_t *ionoutc, gpstime_
     // Add ionospheric delay
     rho->iono_delay = ionosphericDelay(ionoutc, g, llh, rho->azel);
     rho->range += rho->iono_delay;
-
-    return;
 }
 
 /* Compute the code phase for a given channel (satellite)
@@ -1977,11 +2061,9 @@ static void computeCodePhase(channel_t *chan, range_t rho1, double dt) {
 
     // Save current pseudorange
     chan->rho0 = rho1;
-
-    return;
 }
 
-static int generateNavMsg(gpstime_t g, channel_t *chan, int init) {
+void generateNavMsg(gpstime_t g, channel_t *chan, int init) {
     int iwrd, isbf;
     gpstime_t g0;
     unsigned long wn, tow;
@@ -1996,12 +2078,12 @@ static int generateNavMsg(gpstime_t g, channel_t *chan, int init) {
     wn = (unsigned long) (g0.week % 1024);
     tow = ((unsigned long) g0.sec) / 6UL;
 
-    if (init == 1) // Initialize subframe 5
-    {
+    // Initialize the subframe 5
+    if (init == 1) {
         prevwrd = 0UL;
 
         for (iwrd = 0; iwrd < N_DWRD_SBF; iwrd++) {
-            sbfwrd = chan->sbf[4][iwrd];
+            sbfwrd = chan->sbf[4 + chan->ipage * 2][iwrd];
 
             // Add TOW-count message into HOW
             if (iwrd == 1)
@@ -2014,28 +2096,25 @@ static int generateNavMsg(gpstime_t g, channel_t *chan, int init) {
 
             prevwrd = chan->dwrd[iwrd];
         }
-    } else // Save subframe 5
-    {
+    } else {
         for (iwrd = 0; iwrd < N_DWRD_SBF; iwrd++) {
             chan->dwrd[iwrd] = chan->dwrd[N_DWRD_SBF * N_SBF + iwrd];
 
             prevwrd = chan->dwrd[iwrd];
         }
-        /*
-        // Sanity check
-        if (((chan->dwrd[1])&(0x1FFFFUL<<13)) != ((tow&0x1FFFFUL)<<13))
-        {
-                fprintf(stderr, "\nWARNING: Invalid TOW in subframe 5.\n");
-                return(0);
-        }
-         */
     }
 
+    // Generate subframe words
     for (isbf = 0; isbf < N_SBF; isbf++) {
         tow++;
 
         for (iwrd = 0; iwrd < N_DWRD_SBF; iwrd++) {
-            sbfwrd = chan->sbf[isbf][iwrd];
+            if (isbf < 3) // Subframes 1-3
+                sbfwrd = chan->sbf[isbf][iwrd];
+            else if (isbf == 3) // Subframe 4
+                sbfwrd = chan->sbf[3 + chan->ipage * 2][iwrd];
+            else // Subframe 5 
+                sbfwrd = chan->sbf[4 + chan->ipage * 2][iwrd];
 
             // Add transmission week number to Subframe 1
             if ((isbf == 0)&&(iwrd == 2))
@@ -2054,7 +2133,10 @@ static int generateNavMsg(gpstime_t g, channel_t *chan, int init) {
         }
     }
 
-    return (1);
+    // Move to the next pages
+    chan->ipage++;
+    if (chan->ipage >= 25)
+        chan->ipage = 0;
 }
 
 static int checkSatVisibility(ephem_t eph, gpstime_t g, double *xyz, double elvMask, double *azel) {
@@ -2079,7 +2161,7 @@ static int checkSatVisibility(ephem_t eph, gpstime_t g, double *xyz, double elvM
     return (0); // Invisible
 }
 
-static int allocateChannel(channel_t *chan, ephem_t *eph, ionoutc_t ionoutc, gpstime_t grx, double *xyz, double elvMask) {
+static int allocateChannel(channel_t *chan, almanac_gps_t *alm, ephem_t *eph, ionoutc_t ionoutc, gpstime_t grx, double *xyz, double elvMask) {
     NOTUSED(elvMask);
     int nsat = 0;
     int i, sv;
@@ -2108,7 +2190,7 @@ static int allocateChannel(channel_t *chan, ephem_t *eph, ionoutc_t ionoutc, gps
                         codegen(chan[i].ca, chan[i].prn);
 
                         // Generate subframe
-                        eph2sbf(eph[sv], ionoutc, chan[i].sbf);
+                        eph2sbf(eph[sv], ionoutc, alm, chan[i].sbf);
 
                         // Generate navigation message
                         generateNavMsg(grx, &chan[i], 1);
@@ -2281,7 +2363,7 @@ void *gps_thread_ep(void *arg) {
     gui_show_location(&simulator->location);
 
     CURL *curl;
-    CURLcode res = CURLE_GOT_NOTHING;
+    CURLcode curl_code = CURLE_GOT_NOTHING;
     struct ftp_file ftp = {
         RINEX2_FILE_NAME,
         NULL
@@ -2359,7 +2441,7 @@ void *gps_thread_ep(void *arg) {
                 curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
             }
             curl_easy_setopt(curl, CURLOPT_USERPWD, "anonymous:anonymous");
-            res = curl_easy_perform(curl);
+            curl_code = curl_easy_perform(curl);
             curl_easy_cleanup(curl);
         }
 
@@ -2369,13 +2451,13 @@ void *gps_thread_ep(void *arg) {
         free(url);
         curl_global_cleanup();
 
-        if (res != CURLE_OK) {
-            switch (res) {
+        if (curl_code != CURLE_OK) {
+            switch (curl_code) {
                 case CURLE_REMOTE_FILE_NOT_FOUND:
                     gui_status_wprintw(RED, "Curl error: Ephemeris file not found!\n");
                     break;
                 default:
-                    gui_status_wprintw(RED, "Curl error: %d\n", res);
+                    gui_status_wprintw(RED, "Curl error: %d\n", curl_code);
                     break;
             }
             goto end_gps_thread;
@@ -2526,6 +2608,47 @@ void *gps_thread_ep(void *arg) {
     }
 
     ////////////////////////////////////////////////////////////
+    // Read almanac
+    ////////////////////////////////////////////////////////////
+
+    almanac_gps_t *alm = almanac_init();
+    if (simulator->almanac_enable) {
+        if (simulator->use_ftp) {
+            curl_code = almanac_download();
+        } else {
+            curl_code = almanac_read_file();
+        }
+
+        if (curl_code != CURLE_OK) {
+            switch (curl_code) {
+                case CURLE_REMOTE_FILE_NOT_FOUND:
+                    gui_status_wprintw(RED, "Almanac file not found!\n");
+                    break;
+                case CURLE_READ_ERROR:
+                    gui_status_wprintw(RED, "Error reading almanac file!\n");
+                    break;
+                default:
+                    gui_status_wprintw(RED, "Almanac error, code: %d\n", curl_code);
+                    break;
+            }
+        }
+    }
+
+    if (simulator->almanac_enable && alm->valid) {
+        // Check TOA
+        for (sv = 0; sv < MAX_SAT; sv++) {
+            if (alm->sv[sv].valid != 0) // Valid almanac
+            {
+                dt = subGpsTime(alm->sv[sv].toa, g0);
+                if (dt < (-4.0 * SECONDS_IN_WEEK) || dt > (4.0 * SECONDS_IN_WEEK)) {
+                    gui_status_wprintw(RED, "Invalid time of almanac.\n");
+                    goto end_gps_thread;
+                }
+            }
+        }
+    }
+
+    ////////////////////////////////////////////////////////////
     // Initialize channels
     ////////////////////////////////////////////////////////////
 
@@ -2541,7 +2664,7 @@ void *gps_thread_ep(void *arg) {
     grx = incGpsTime(g0, 0.0);
 
     // Allocate visible satellites
-    allocateChannel(chan, eph[ieph], ionoutc, grx, xyz[0], elvmask);
+    allocateChannel(chan, alm, eph[ieph], ionoutc, grx, xyz[0], elvmask);
 
     for (i = 0; i < MAX_CHAN; i++) {
         if (chan[i].prn > 0) {
@@ -2748,8 +2871,9 @@ void *gps_thread_ep(void *arg) {
         {
             // Update navigation message
             for (i = 0; i < MAX_CHAN; i++) {
-                if (chan[i].prn > 0)
+                if (chan[i].prn > 0) {
                     generateNavMsg(grx, &chan[i], 0);
+                }
             }
 
             // Refresh ephemeris and subframes
@@ -2759,11 +2883,14 @@ void *gps_thread_ep(void *arg) {
                     dt = subGpsTime(eph[ieph + 1][sv].toc, grx);
                     if (dt < SECONDS_IN_HOUR) {
                         ieph++;
+                        if (ieph >= EPHEM_ARRAY_SIZE) {
+                            ieph = 0;
+                        }
 
                         for (i = 0; i < MAX_CHAN; i++) {
                             // Generate new subframes if allocated
                             if (chan[i].prn != 0)
-                                eph2sbf(eph[ieph][chan[i].prn - 1], ionoutc, chan[i].sbf);
+                                eph2sbf(eph[ieph][chan[i].prn - 1], ionoutc, alm, chan[i].sbf);
                         }
                     }
                     break;
@@ -2771,7 +2898,7 @@ void *gps_thread_ep(void *arg) {
             }
 
             // Update channel allocation
-            allocateChannel(chan, eph[ieph], ionoutc, grx, xyz[0], elvmask);
+            allocateChannel(chan, alm, eph[ieph], ionoutc, grx, xyz[0], elvmask);
 
             if (simulator->show_verbose) {
                 gps2date(&grx, &simulator->start);
