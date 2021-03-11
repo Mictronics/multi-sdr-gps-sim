@@ -99,6 +99,9 @@ int sdr_pluto_init(simulator_t *simulator) {
     struct iio_context_info **info;
     int ret;
     int y = gui_y_offset;
+    unsigned int irates[6];
+    long long lo_hz = 0;
+    unsigned long xo_correction = 0;
 
     // ADLAM-Pluto wants 16 bit signed samples
     if (simulator->sample_size == SC08) {
@@ -181,12 +184,6 @@ int sdr_pluto_init(simulator_t *simulator) {
     iio_channel_attr_write_longlong(phy_chn, "sampling_frequency", TX_SAMPLERATE);
     iio_channel_attr_write_double(phy_chn, "hardwaregain", simulator->tx_gain);
 
-    gui_mvwprintw(TRACK, y++, gui_x_offset, "Freq (%" PRIu64 " Hz/%.03f MHz)", freq_gps_hz, ((double) freq_gps_hz / (double) FREQ_ONE_MHZ));
-    gui_mvwprintw(TRACK, y++, gui_x_offset, "Baseband filter bandwidth (%d Hz/%.03f MHz)",
-            PLUTO_TX_BW, ((float) PLUTO_TX_BW / (float) FREQ_ONE_MHZ));
-    gui_mvwprintw(TRACK, y++, gui_x_offset, "Sample rate (%u Hz/%.03f MHz)", TX_SAMPLERATE, ((float) TX_SAMPLERATE / (float) FREQ_ONE_MHZ));
-    gui_mvwprintw(TRACK, y++, gui_x_offset, "TX gain: %idB", simulator->tx_gain);
-
     iio_channel_attr_write_bool(
             iio_device_find_channel(phydev, "altvoltage0", true)
             , "powerdown", true); // Turn OFF RX LO
@@ -207,6 +204,40 @@ int sdr_pluto_init(simulator_t *simulator) {
     iio_channel_enable(tx0_q);
 
     ad9361_set_bb_rate(iio_context_find_device(ctx, "ad9361-phy"), TX_SAMPLERATE);
+
+    // Read back TX path oscillator chain settings
+    ret = iio_device_attr_read(phydev, "tx_path_rates", buf, sizeof (buf));
+    if (ret > 0) {
+        sscanf(buf, "BBPLL:%u DAC:%u T2:%u T1:%u TF:%u TXSAMP:%u",
+                &irates[0], &irates[1], &irates[2], &irates[3], &irates[4], &irates[5]);
+    }
+
+    // Read external reference oscillator calibration value
+    ret = iio_device_attr_read(phydev, "xo_correction", buf, sizeof (buf));
+    if (ret > 0) {
+        sscanf(buf, "%lu", &xo_correction);
+    }
+
+    // Read back real TX frequency
+    ret = iio_channel_attr_read_longlong(iio_device_find_channel(phydev, "altvoltage1", true), "frequency", &lo_hz);
+    if (ret == 0) {
+        gui_mvwprintw(TRACK, y++, gui_x_offset, "Freq (%llu Hz/%.03f MHz)", lo_hz, ((double) lo_hz / (double) FREQ_ONE_MHZ));
+    }
+
+    gui_mvwprintw(TRACK, y++, gui_x_offset, "Baseband filter bandwidth (%d Hz/%.03f MHz)",
+            PLUTO_TX_BW, ((float) PLUTO_TX_BW / (float) FREQ_ONE_MHZ));
+    gui_mvwprintw(TRACK, y++, gui_x_offset, "Sample rate (%u Hz/%.03f MHz)", irates[5], ((float) irates[5] / (float) FREQ_ONE_MHZ));
+    gui_mvwprintw(TRACK, y++, gui_x_offset, "TX gain: %idB", simulator->tx_gain);
+
+    if (simulator->show_verbose) {
+        gui_mvwprintw(TRACK, y++, gui_x_offset, "XO Correction: %lu Hz", xo_correction);
+        gui_mvwprintw(TRACK, y++, gui_x_offset, "TX path rates");
+        gui_mvwprintw(TRACK, y++, gui_x_offset, "   BBPLL: %4.6f", irates[0] / 1e6);
+        gui_mvwprintw(TRACK, y++, gui_x_offset, "   DAC: %4.6f", irates[1] / 1e6);
+        gui_mvwprintw(TRACK, y++, gui_x_offset, "   T1: %4.6f", irates[3] / 1e6);
+        gui_mvwprintw(TRACK, y++, gui_x_offset, "   T2: %4.6f", irates[2] / 1e6);
+        gui_mvwprintw(TRACK, y++, gui_x_offset, "   TF: %4.6f", irates[4] / 1e6);
+    }
 
     tx_buffer = iio_device_create_buffer(tx, NUM_IQ_SAMPLES, false);
     if (!tx_buffer) {
