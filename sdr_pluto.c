@@ -180,7 +180,7 @@ int sdr_pluto_init(simulator_t *simulator) {
     phydev = iio_context_find_device(ctx, "ad9361-phy");
     struct iio_channel* phy_chn = iio_device_find_channel(phydev, "voltage0", true);
     iio_channel_attr_write(phy_chn, "rf_port_select", "A");
-    iio_channel_attr_write_longlong(phy_chn, "rf_bandwidth", PLUTO_TX_BW);
+    iio_channel_attr_write_longlong(phy_chn, "rf_bandwidth", TX_BW);
     iio_channel_attr_write_longlong(phy_chn, "sampling_frequency", TX_SAMPLERATE);
     iio_channel_attr_write_double(phy_chn, "hardwaregain", simulator->tx_gain);
 
@@ -224,8 +224,7 @@ int sdr_pluto_init(simulator_t *simulator) {
         gui_mvwprintw(TRACK, y++, gui_x_offset, "Freq (%llu Hz/%.03f MHz)", lo_hz, ((double) lo_hz / (double) FREQ_ONE_MHZ));
     }
 
-    gui_mvwprintw(TRACK, y++, gui_x_offset, "Baseband filter bandwidth (%d Hz/%.03f MHz)",
-            PLUTO_TX_BW, ((float) PLUTO_TX_BW / (float) FREQ_ONE_MHZ));
+    gui_mvwprintw(TRACK, y++, gui_x_offset, "Baseband filter bandwidth (%d Hz/%.03f MHz)", TX_BW, ((float) TX_BW / (float) FREQ_ONE_MHZ));
     gui_mvwprintw(TRACK, y++, gui_x_offset, "Sample rate (%u Hz/%.03f MHz)", irates[5], ((float) irates[5] / (float) FREQ_ONE_MHZ));
     gui_mvwprintw(TRACK, y++, gui_x_offset, "TX gain: %idB", simulator->tx_gain);
 
