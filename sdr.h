@@ -15,9 +15,11 @@
 
 #include "gps-sim.h"
 
-#define TX_FREQUENCY 1575420000 // 1575420000/1023 = 1540000
-#define TX_SAMPLERATE 2618880 //chips-> 1023 * 2560 = 2618880
+#define TX_FREQUENCY 1575420000
 #define FREQ_ONE_MHZ (1000000ull)
+// 3 MHz is generated in Pluto SDR with integer dividers being multiple of 2
+#define TX_SAMPLERATE 3000000
+#define TX_BW (TX_SAMPLERATE * 2)
 
 #define NUM_FIFO_BUFFERS 8
 // Number of samples for 0.1 second transmission
