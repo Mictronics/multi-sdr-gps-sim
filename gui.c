@@ -24,11 +24,13 @@
 
 static const int info_width = 50;
 static const int info_height = 13;
+static const int help_width = 50;
+static const int help_height = 13;
 static int max_x = 0;
 static int max_y = 0;
 
-static WINDOW *window[12] = {NULL};
-static PANEL *panel[12] = {NULL};
+static WINDOW *window[13] = {NULL};
+static PANEL *panel[13] = {NULL};
 
 static pthread_mutex_t gui_lock; // Mutex to lock access during GUI updates
 
@@ -39,7 +41,7 @@ static void gui_update() {
 
 static void show_footer(WINDOW *win) {
     wattron(win, COLOR_PAIR(2));
-    mvwprintw(win, max_y - STATUS_HEIGHT - 2, 10, "TAB or F1-F3 switch displays. 'x' Exit. 'i' Info");
+    mvwprintw(win, max_y - STATUS_HEIGHT - 2, 10, "TAB or F1-F3 switch displays, 'x' Exit, 'i' Info, 'h' Help");
     wattroff(win, COLOR_PAIR(2));
 }
 
@@ -241,6 +243,21 @@ static void init_windows(void) {
     mvwprintw(window[INFO], info_height - 2, 2, "Press any key to return.");
     wattroff(window[INFO], COLOR_PAIR(2));
 
+    /* setup help window */
+    info_x = (max_x - help_width) / 2;
+    info_y = (max_y - help_height) / 2;
+    window[HELP] = newwin(help_height, help_width, info_y, info_x);
+    box(window[HELP], 0, 0);
+    wattron(window[HELP], COLOR_PAIR(1));
+    mvwprintw(window[HELP], 1, 2, "Help");
+    wattroff(window[HELP], COLOR_PAIR(1));
+    mvwprintw(window[HELP], 2, 2, "w   Increase altitude     i    Info");
+    mvwprintw(window[HELP], 3, 2, "s   Decrease altitude     h    Help");
+    mvwprintw(window[HELP], 4, 2, "d   Heading right         x    Exit");
+    mvwprintw(window[HELP], 5, 2, "a   Heading left          F1   Setup Window");
+    mvwprintw(window[HELP], 6, 2, "e   Increase speed        F2   Status Window");
+    mvwprintw(window[HELP], 7, 2, "q   Decrease speed        F3   Position Window");
+
     /* Attach a panel to each window
      * Order is bottom up
      */
@@ -250,7 +267,9 @@ static void init_windows(void) {
     panel[EPHEMERIS] = new_panel(window[EPHEMERIS]);
     panel[INFO] = new_panel(window[INFO]);
     panel[STATUS] = new_panel(window[STATUS]);
+    panel[HELP] = new_panel(window[HELP]);
     hide_panel(panel[INFO]);
+    hide_panel(panel[HELP]);
 
     /* Set up the user pointers to the next panel */
 
@@ -333,6 +352,7 @@ void gui_destroy(void) {
     delwin(window[LOCATION]);
     delwin(window[EPHEMERIS]);
     delwin(window[STATUS]);
+    delwin(window[HELP]);
     endwin();
 }
 
@@ -409,12 +429,12 @@ void gui_toggle_current_panel(void) {
     pthread_mutex_unlock(&gui_lock);
 }
 
-void gui_show_info(attr_status_t onoff) {
+void gui_show_panel(window_panel_t p, attr_status_t onoff) {
     pthread_mutex_lock(&gui_lock);
     if (onoff == ON) {
-        show_panel(panel[INFO]);
+        show_panel(panel[p]);
     } else {
-        hide_panel(panel[INFO]);
+        hide_panel(panel[p]);
     }
     gui_update();
     pthread_mutex_unlock(&gui_lock);

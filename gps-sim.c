@@ -267,6 +267,7 @@ int thread_to_core(int core_id) {
 int main(int argc, char** argv) {
     int ch = 0;
     bool is_info_shown = false;
+    bool is_help_shown = false;
 
     // signal handlers:
     signal(SIGINT, signal_handler);
@@ -292,7 +293,7 @@ int main(int argc, char** argv) {
     }
     gui_init();
     // No access to GUI until this point
-   
+
     if (simulator.interactive_mode && simulator.motion_file_name != NULL) {
         simulator.interactive_mode = false;
         simulator.target.valid = false;
@@ -338,8 +339,14 @@ int main(int argc, char** argv) {
                     break;
                 case 'i':
                 case 'I':
-                    gui_show_info(ON);
+                    gui_show_panel(INFO, ON);
                     is_info_shown = true;
+                    break;
+                case '?':
+                case 'h':
+                case 'H':
+                    gui_show_panel(HELP, ON);
+                    is_help_shown = true;
                     break;
                 case 9: // TAB
                     gui_toggle_current_panel();
@@ -386,8 +393,12 @@ int main(int argc, char** argv) {
                     break;
                 default:
                     if (is_info_shown) {
-                        gui_show_info(OFF);
+                        gui_show_panel(INFO, OFF);
                         is_info_shown = false;
+                    }
+                    if (is_help_shown) {
+                        gui_show_panel(HELP, OFF);
+                        is_help_shown = false;
                     }
                     break;
             }
