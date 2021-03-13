@@ -27,7 +27,7 @@ static struct argp_option options[] = {
     {"verbose", 'v', 0, 0, "Show verbose output and details about simulated channels", 1},
     {"interactive", 'i', 0, 0, "Use interactive mode", 1},
     {"amplifier", 'a', 0, 0, "Enable TX amplifier (default OFF)", 1},
-    {"gain", 'g', "gain", 0, "Set TX gain, HackRF: 0-47dB, Pluto: -80-0dB (default 0)", 1},
+    {"gain", 'g', "gain", 0, "Set initial TX gain, HackRF: 0-47dB, Pluto: -80-0dB (default 0)", 1},
     {"duration", 'd', "seconds", 0, "Duration in seconds", 1},
     {"target", 't', "distance,bearing,height", 0, "Target distance [m], bearing [°] and height [m]", 1},
     {"ppb", 'p', "ppb", 0, "Set oscillator error in ppb (default 0)", 1},
