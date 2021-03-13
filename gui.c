@@ -257,6 +257,8 @@ static void init_windows(void) {
     mvwprintw(window[HELP], 5, 2, "a   Heading left          F1   Setup Window");
     mvwprintw(window[HELP], 6, 2, "e   Increase speed        F2   Status Window");
     mvwprintw(window[HELP], 7, 2, "q   Decrease speed        F3   Position Window");
+    mvwprintw(window[HELP], 8, 2, "t   Increase TX gain");
+    mvwprintw(window[HELP], 9, 2, "g   Decrease TX gain");
 
     /* Attach a panel to each window
      * Order is bottom up

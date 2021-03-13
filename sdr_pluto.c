@@ -269,3 +269,23 @@ int sdr_pluto_run(void) {
     pthread_create(&pluto_tx_thread, NULL, pluto_tx_thread_ep, NULL);
     return 0;
 }
+
+int sdr_pluto_set_gain(const int gain) {
+    char buf[1024];
+    double g = gain;
+    int ret;
+
+    if (g > PLUTO_TX_GAIN_MAX) g = PLUTO_TX_GAIN_MAX;
+    if (g < PLUTO_TX_GAIN_MIN) g = PLUTO_TX_GAIN_MIN;
+
+    struct iio_channel* phy_chn = iio_device_find_channel(phydev, "voltage0", true);
+    iio_channel_attr_write_double(phy_chn, "hardwaregain", g);
+
+    // Read back TX gain value
+    ret = iio_channel_attr_read(phy_chn, "hardwaregain", buf, sizeof (buf));
+    if (ret > 0) {
+        sscanf(buf, "%lf", &g);
+    }
+
+    return (int) (g);
+}

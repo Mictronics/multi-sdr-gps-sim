@@ -24,5 +24,7 @@
 int sdr_hackrf_init(simulator_t *simulator);
 void sdr_hackrf_close(void);
 int sdr_hackrf_run(void);
+int sdr_hackrf_set_gain(const int gain);
+
 #endif /* SDR_HACKRF_H */
 

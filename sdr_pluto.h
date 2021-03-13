@@ -42,6 +42,7 @@
 int sdr_pluto_init(simulator_t *simulator);
 void sdr_pluto_close(void);
 int sdr_pluto_run(void);
+int sdr_pluto_set_gain(const int gain);
 
 #endif /* SDR_PLUTO_H */
 

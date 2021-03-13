@@ -28,6 +28,8 @@
 #define LEFT_KEY  'a'
 #define UPSPEED_KEY  'e'
 #define DOWNSPEED_KEY 'q'
+#define GAIN_INC_KEY 't'
+#define GAIN_DEC_KEY 'g'
 
 typedef enum {
     TRACK = 0,

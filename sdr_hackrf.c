@@ -263,3 +263,19 @@ int sdr_hackrf_run(void) {
 
     return 0;
 }
+
+int sdr_hackrf_set_gain(const int gain) {
+    int g = gain;
+    if (g < TX_IF_GAIN_MIN) {
+        g = TX_IF_GAIN_MIN;
+    } else if (g > TX_IF_GAIN_MAX) {
+        g = TX_IF_GAIN_MAX;
+    }
+
+    int result = hackrf_set_txvga_gain(device, g);
+    if (result != HACKRF_SUCCESS) {
+        gui_status_wprintw(RED, "hackrf_set_txvga_gain() failed: %s (%d)", hackrf_error_name(result), result);
+    }
+
+    return g;
+}

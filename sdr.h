@@ -36,6 +36,7 @@
 int sdr_init(simulator_t *simulator);
 void sdr_close(void);
 int sdr_run(void);
+int sdr_set_gain(int gain);
 
 #endif /* SDR_H */
 

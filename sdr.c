@@ -18,11 +18,13 @@
 static int no_init(void);
 static void no_close(void);
 static int no_run(void);
+static int no_set_gain(const int);
 
 typedef struct {
     int (*init)();
     void (*close)();
     int (*run)();
+    int (*set_gain)(const int);
     const char *name;
     sdr_type_t sdr_type;
 } sdr_handler;
@@ -30,16 +32,16 @@ typedef struct {
 static sdr_type_t current_type = SDR_NONE;
 
 static sdr_handler sdr_handlers[] = {
-    { no_init, no_close, no_run, "none", SDR_NONE},
-    { sdr_iqfile_init, sdr_iqfile_close, sdr_iqfile_run, "iqfile", SDR_IQFILE},
+    { no_init, no_close, no_run, no_set_gain, "none", SDR_NONE},
+    { sdr_iqfile_init, sdr_iqfile_close, sdr_iqfile_run, no_set_gain, "iqfile", SDR_IQFILE},
 #ifdef ENABLE_HACKRFSDR
-    { sdr_hackrf_init, sdr_hackrf_close, sdr_hackrf_run, "hackrf", SDR_HACKRF},
+    { sdr_hackrf_init, sdr_hackrf_close, sdr_hackrf_run, sdr_hackrf_set_gain, "hackrf", SDR_HACKRF},
 #endif
 
 #ifdef ENABLE_PLUTOSDR
-    { sdr_pluto_init, sdr_pluto_close, sdr_pluto_run, "plutosdr", SDR_PLUTOSDR},
+    { sdr_pluto_init, sdr_pluto_close, sdr_pluto_run, sdr_pluto_set_gain, "plutosdr", SDR_PLUTOSDR},
 #endif
-    { NULL, NULL, NULL, NULL, SDR_NONE} /* must come last */
+    { NULL, NULL, NULL, NULL, NULL, SDR_NONE} /* must come last */
 };
 
 static int no_init() {
@@ -55,6 +57,11 @@ static void no_close() {
 
 static int no_run() {
     return -1;
+}
+
+static int no_set_gain(const int gain) {
+    NOTUSED(gain);
+    return -100;
 }
 
 static sdr_handler *current_handler(void) {
@@ -84,4 +91,8 @@ void sdr_close(void) {
 
 int sdr_run(void) {
     return current_handler()->run();
+}
+
+int sdr_set_gain(const int gain) {
+    return current_handler()->set_gain(gain);
 }
