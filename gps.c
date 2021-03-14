@@ -2285,10 +2285,12 @@ void *gps_thread_ep(void *arg) {
     ephem_t eph[EPHEM_ARRAY_SIZE][MAX_SAT];
     channel_t chan[MAX_CHAN];
 
+    datetime_t ttmp;
     datetime_t tmin, tmax;
     gpstime_t gmin, gmax;
     gpstime_t grx;
     gpstime_t g0;
+    gpstime_t gtmp;
     g0.week = -1; // Invalid start time
     date2gps(&simulator->start, &g0);
 
@@ -2477,15 +2479,15 @@ void *gps_thread_ep(void *arg) {
 
     if (simulator->show_verbose) {
         if (ionoutc.vflg && ionoutc.enable) {
-            gui_mvwprintw(LS_FIX, 13, 40, "ION ALPHA %12.3e %12.3e %12.3e %12.3e",
+            gui_mvwprintw(LS_FIX, 14, 40, "ION ALPHA %12.3e %12.3e %12.3e %12.3e",
                     ionoutc.alpha0, ionoutc.alpha1, ionoutc.alpha2, ionoutc.alpha3);
-            gui_mvwprintw(LS_FIX, 14, 40, "ION BETA  %12.3e %12.3e %12.3e %12.3e",
+            gui_mvwprintw(LS_FIX, 15, 40, "ION BETA  %12.3e %12.3e %12.3e %12.3e",
                     ionoutc.beta0, ionoutc.beta1, ionoutc.beta2, ionoutc.beta3);
-            gui_mvwprintw(LS_FIX, 15, 40, "DELTA UTC %12.3e %12.3e %9d  %9d",
+            gui_mvwprintw(LS_FIX, 16, 40, "DELTA UTC %12.3e %12.3e %9d  %9d",
                     ionoutc.A0, ionoutc.A1, ionoutc.tot, ionoutc.wnt);
-            gui_mvwprintw(LS_FIX, 16, 40, "LEAP SECONDS %d", ionoutc.dtls);
+            gui_mvwprintw(LS_FIX, 17, 40, "LEAP SECONDS %d", ionoutc.dtls);
         } else {
-            gui_mvwprintw(LS_FIX, 13, 40, "Ionospheric data invalid or disabled!");
+            gui_mvwprintw(LS_FIX, 14, 40, "Ionospheric data invalid or disabled!");
         }
     }
 
@@ -2529,8 +2531,6 @@ void *gps_thread_ep(void *arg) {
     if (g0.week >= 0) // Scenario start time has been set.
     {
         if (simulator->time_overwrite == true) {
-            gpstime_t gtmp;
-            datetime_t ttmp;
             double dsec;
 
             gtmp.week = g0.week;
@@ -2577,10 +2577,10 @@ void *gps_thread_ep(void *arg) {
     }
 
     gui_mvwprintw(LS_FIX, 8, 40, "RINEX date:      %s", rinex_date);
-    gui_mvwprintw(LS_FIX, 9, 40, "Start time:      %4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)",
+    gui_mvwprintw(LS_FIX, 10, 40, "Start time:      %4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)",
             simulator->start.y, simulator->start.m, simulator->start.d, simulator->start.hh, simulator->start.mm, simulator->start.sec, g0.week, g0.sec);
     if (simulator->show_verbose) {
-        gui_mvwprintw(LS_FIX, 10, 40, "Simulation time: ");
+        gui_mvwprintw(LS_FIX, 11, 40, "Simulation time: ");
     }
     gui_mvwprintw(LS_FIX, 7, 40, "Duration:        %.1fs", ((double) numd) / 10.0);
 
@@ -2635,10 +2635,13 @@ void *gps_thread_ep(void *arg) {
     }
 
     if (simulator->almanac_enable && alm->valid) {
+        gtmp.sec = 0.0;
+        gtmp.week = 0;
         // Check TOA
         for (sv = 0; sv < MAX_SAT; sv++) {
             if (alm->sv[sv].valid != 0) // Valid almanac
             {
+                gtmp = alm->sv[sv].toa;
                 dt = subGpsTime(alm->sv[sv].toa, g0);
                 if (dt < (-4.0 * SECONDS_IN_WEEK) || dt > (4.0 * SECONDS_IN_WEEK)) {
                     gui_status_wprintw(RED, "Invalid time of almanac.\n");
@@ -2646,6 +2649,11 @@ void *gps_thread_ep(void *arg) {
                 }
             }
         }
+        gps2date(&gtmp, &ttmp);
+        gui_mvwprintw(LS_FIX, 9, 40, "Almanac date:    %4d/%02d/%02d,%02d:%02d:%02.0f",
+                ttmp.y, ttmp.m, ttmp.d, ttmp.hh, ttmp.mm, ttmp.sec);
+    } else {
+        gui_mvwprintw(LS_FIX, 9, 40, "Almanac date:    Disabled or invalid.");
     }
 
     ////////////////////////////////////////////////////////////
@@ -2902,7 +2910,7 @@ void *gps_thread_ep(void *arg) {
 
             if (simulator->show_verbose) {
                 gps2date(&grx, &simulator->start);
-                gui_mvwprintw(LS_FIX, 10, 57, "%4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)",
+                gui_mvwprintw(LS_FIX, 11, 57, "%4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)",
                         simulator->start.y, simulator->start.m, simulator->start.d, simulator->start.hh, simulator->start.mm, simulator->start.sec, grx.week, grx.sec);
                 gui_mvwprintw(LS_FIX, 5, 40, "xyz = %11.1f, %11.1f, %11.1f", xyz[iumd][0], xyz[iumd][1], xyz[iumd][2]);
                 gui_mvwprintw(LS_FIX, 6, 40, "llh = %11.6f, %11.6f, %11.1f", llh[0] * R2D, llh[1] * R2D, llh[2]);
@@ -2924,7 +2932,7 @@ void *gps_thread_ep(void *arg) {
         grx = incGpsTime(grx, 0.1);
 
         // Update time counter
-        gui_mvwprintw(LS_FIX, 11, 40, "Elapsed:         %5.1fs", subGpsTime(grx, g0));
+        gui_mvwprintw(LS_FIX, 12, 40, "Elapsed:         %5.1fs", subGpsTime(grx, g0));
     }
 
     gui_status_wprintw(GREEN, "Simulation complete\n");
