@@ -780,12 +780,12 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
             svId = (unsigned long) (sv + 1);
             ecc = (unsigned long) (alm->sv[sv].e / POW2_M21);
             toa = (unsigned long) (alm->sv[sv].toa.sec / POW2_12);
-            delta_i = (signed long) ((alm->sv[sv].delta_i / PI - 0.3) / POW2_M19);
-            omegadot = (signed long) (alm->sv[sv].omegadot / PI / POW2_M38);
+            delta_i = (signed long) (alm->sv[sv].delta_i / POW2_M19);
+            omegadot = (signed long) (alm->sv[sv].omegadot / POW2_M38);
             sqrta = (unsigned long) (alm->sv[sv].sqrta / POW2_M11);
-            omega0 = (signed long) (alm->sv[sv].omega0 / PI / POW2_M23);
-            aop = (signed long) (alm->sv[sv].aop / PI / POW2_M23);
-            m0 = (signed long) (alm->sv[sv].m0 / PI / POW2_M23);
+            omega0 = (signed long) (alm->sv[sv].omega0 / POW2_M23);
+            aop = (signed long) (alm->sv[sv].aop / POW2_M23);
+            m0 = (signed long) (alm->sv[sv].m0 / POW2_M23);
             af0 = (signed long) (alm->sv[sv].af0 / POW2_M20);
             af1 = (signed long) (alm->sv[sv].af1 / POW2_M38);
 
@@ -836,12 +836,12 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
             svId = (unsigned long) (sv + 1);
             ecc = (unsigned long) (alm->sv[sv].e / POW2_M21);
             toa = (unsigned long) (alm->sv[sv].toa.sec / 4096.0);
-            delta_i = (signed long) ((alm->sv[sv].delta_i / PI - 0.3) / POW2_M19);
-            omegadot = (signed long) (alm->sv[sv].omegadot / PI / POW2_M38);
+            delta_i = (signed long) (alm->sv[sv].delta_i / POW2_M19);
+            omegadot = (signed long) (alm->sv[sv].omegadot / POW2_M38);
             sqrta = (unsigned long) (alm->sv[sv].sqrta / POW2_M11);
-            omega0 = (signed long) (alm->sv[sv].omega0 / PI / POW2_M23);
-            aop = (signed long) (alm->sv[sv].aop / PI / POW2_M23);
-            m0 = (signed long) (alm->sv[sv].m0 / PI / POW2_M23);
+            omega0 = (signed long) (alm->sv[sv].omega0 / POW2_M23);
+            aop = (signed long) (alm->sv[sv].aop / POW2_M23);
+            m0 = (signed long) (alm->sv[sv].m0 / POW2_M23);
             af0 = (signed long) (alm->sv[sv].af0 / POW2_M20);
             af1 = (signed long) (alm->sv[sv].af1 / POW2_M38);
 
