@@ -10,6 +10,7 @@
  *
  */
 
+#include "gui.h"
 #include "sdr_hackrf.h"
 #include "sdr_iqfile.h"
 #include "sdr_pluto.h"
@@ -45,9 +46,9 @@ static sdr_handler sdr_handlers[] = {
 };
 
 static int no_init() {
-    fprintf(stderr, "SDR type not recognized; supported SDR types are:\n");
+    gui_status_wprintw(RED, "SDR type not recognized; supported SDR types are:\n");
     for (int i = 0; sdr_handlers[i].name; ++i) {
-        fprintf(stderr, "  %s\n", sdr_handlers[i].name);
+        gui_status_wprintw(RED, "  %s\n", sdr_handlers[i].name);
     }
     return -1;
 }
