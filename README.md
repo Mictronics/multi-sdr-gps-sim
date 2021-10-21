@@ -72,7 +72,7 @@ $ sudo make install
 
 ```
 $ git clone https://github.com/mictronics/multi-sdr-gps-sim
-$ cd pluto-gps-sim
+$ cd multi-sdr-gps-sim
 ```
 
 With HackRF support: `make all HACKRFSDR=yes` (depends on libhackrf)
