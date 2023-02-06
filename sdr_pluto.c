@@ -137,13 +137,13 @@ int sdr_pluto_init(simulator_t *simulator) {
     }
 
     // Create IIO context to access ADALM-Pluto
-    ctx = iio_create_default_context();
-    if (ctx == NULL) {
-        if (simulator->pluto_hostname != NULL) {
-            ctx = iio_create_network_context(simulator->pluto_hostname);
-        } else if (simulator->pluto_uri != NULL) {
-            ctx = iio_create_context_from_uri(simulator->pluto_uri);
-        } else {
+    if (simulator->pluto_hostname != NULL) {
+        ctx = iio_create_network_context(simulator->pluto_hostname);
+    } else if (simulator->pluto_uri != NULL) {
+        ctx = iio_create_context_from_uri(simulator->pluto_uri);
+    } else {
+        ctx = iio_create_default_context();
+        if (ctx == NULL) {
             ctx = iio_create_network_context("pluto.local");
         }
     }
