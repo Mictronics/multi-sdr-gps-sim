@@ -29,6 +29,10 @@ static hackrf_device* device;
 static const int gui_y_offset = 4;
 static const int gui_x_offset = 2;
 
+static int clamp_gain(int gain) {
+    return gain < TX_IF_GAIN_MIN ? TX_IF_GAIN_MIN : (gain > TX_IF_GAIN_MAX ? TX_IF_GAIN_MAX : gain);
+}
+
 int sdr_hackrf_init(simulator_t *simulator) {
     int result = HACKRF_SUCCESS;
     double sample_rate_gps_hz;
@@ -131,11 +135,7 @@ int sdr_hackrf_init(simulator_t *simulator) {
         return -1;
     }
 
-    if (simulator->tx_gain < TX_IF_GAIN_MIN) {
-        simulator->tx_gain = TX_IF_GAIN_MIN;
-    } else if (simulator->tx_gain > TX_IF_GAIN_MAX) {
-        simulator->tx_gain = TX_IF_GAIN_MAX;
-    }
+    simulator->tx_gain = clamp_gain(simulator->tx_gain);
 
     gui_mvwprintw(TRACK, y++, gui_x_offset, "TX IF gain: %idB", simulator->tx_gain);
     result = hackrf_set_txvga_gain(device, simulator->tx_gain);
@@ -205,12 +205,7 @@ int sdr_hackrf_run(void) {
 }
 
 int sdr_hackrf_set_gain(const int gain) {
-    int g = gain;
-    if (g < TX_IF_GAIN_MIN) {
-        g = TX_IF_GAIN_MIN;
-    } else if (g > TX_IF_GAIN_MAX) {
-        g = TX_IF_GAIN_MAX;
-    }
+    int g = clamp_gain(gain);
 
     int result = hackrf_set_txvga_gain(device, g);
     if (result != HACKRF_SUCCESS) {
