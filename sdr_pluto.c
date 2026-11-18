@@ -259,10 +259,10 @@ int sdr_pluto_init(simulator_t *simulator) {
 void sdr_pluto_close(void) {
     pluto_tx_thread_exit = true;
     fifo_halt();
-    fifo_destroy();
     if (thread_started) {
         pthread_join(pluto_tx_thread, NULL);
     }
+    fifo_destroy();
 }
 
 int sdr_pluto_run(void) {

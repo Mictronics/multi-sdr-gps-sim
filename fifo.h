@@ -22,6 +22,7 @@ struct iq_buf {
     unsigned int totalLength; // Maximum number of samples (allocated size of "data")
     unsigned int validLength; // Number of valid samples in "data"
     struct iq_buf *next; // linked list forward link
+    struct iq_buf *all_next; // link in the list of all buffers, used by fifo_destroy
 };
 
 // Create the queue structures. Not threadsafe. Returns true on success.
@@ -30,22 +31,21 @@ struct iq_buf {
 //   buffer_size  - the size of each IQ buffer, in samples
 bool fifo_create(unsigned buffer_count, unsigned buffer_size, unsigned sample_size);
 
-// Destroy the fifo structures allocated in fifo_create. Not threadsafe; ensure all FIFO users
-// are done before calling.
+// Free all buffers, including ones still held by users. Not threadsafe; halt the FIFO and
+// stop every producer and consumer thread before calling.
 void fifo_destroy();
 
 // Block until the FIFO is empty.
 void fifo_wait_next();
 
-// Block until the FIFO is full.
+// Block until the producer has used up all free buffers once, or the FIFO is halted.
 void fifo_wait_full();
 
 // Mark the FIFO as halted. Move any buffers in FIFO to the freelist immediately.
 void fifo_halt();
 
 // Get an unused buffer from the freelist and return it.
-// Block waiting for a free buffer.
-// free buffers available within the timeout, or if the FIFO is halted.
+// Block waiting for a free buffer. Returns NULL if the FIFO is halted.
 struct iq_buf *fifo_acquire(void);
 
 // Put a filled buffer (previously obtained from fifo_acquire) onto the head of the FIFO.

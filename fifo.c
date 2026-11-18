@@ -26,11 +26,16 @@ static pthread_cond_t fifo_full_cond = PTHREAD_COND_INITIALIZER; // condition us
 static struct iq_buf *fifo_head; // head of queued buffers awaiting demodulation
 static struct iq_buf *fifo_tail; // tail of queued buffers awaiting demodulation
 static struct iq_buf *fifo_freelist; // freelist of preallocated buffers
+static struct iq_buf *fifo_all; // every allocated buffer, wherever it currently is
 static bool fifo_halted; // true if queue has been halted
+static bool fifo_full; // true once the producer found the freelist empty
 
 // Create the queue structures. Not threadsafe.
 
 bool fifo_create(unsigned buffer_count, unsigned buffer_size, unsigned sample_size) {
+    fifo_halted = false;
+    fifo_full = false;
+
     for (unsigned i = 0; i < buffer_count; ++i) {
         struct iq_buf *newbuf;
         if (!(newbuf = calloc(1, sizeof (*newbuf)))) {
@@ -55,6 +60,8 @@ bool fifo_create(unsigned buffer_count, unsigned buffer_size, unsigned sample_si
         newbuf->validLength = 0;
         newbuf->next = fifo_freelist;
         fifo_freelist = newbuf;
+        newbuf->all_next = fifo_all;
+        fifo_all = newbuf;
     }
 
     return true;
@@ -64,26 +71,19 @@ nomem:
     return false;
 }
 
-static void free_buffer_list(struct iq_buf *head) {
-    while (head) {
-        struct iq_buf *next = head->next;
-        free(head->data8);
-        free(head->data16);
-        free(head);
-        head = next;
-    }
-}
-
+// Frees all buffers, including ones still held by a producer or consumer, so
+// every thread using the FIFO must have stopped. The static mutex and condition
+// variables need no destroy.
 void fifo_destroy() {
-    free_buffer_list(fifo_head);
-    free_buffer_list(fifo_freelist);
+    while (fifo_all) {
+        struct iq_buf *next = fifo_all->all_next;
+        free(fifo_all->data8);
+        free(fifo_all->data16);
+        free(fifo_all);
+        fifo_all = next;
+    }
     fifo_freelist = NULL;
     fifo_head = fifo_tail = NULL;
-    pthread_cond_destroy(&fifo_notempty_cond);
-    pthread_cond_destroy(&fifo_full_cond);
-    pthread_cond_destroy(&fifo_free_cond);
-    pthread_cond_destroy(&fifo_empty_cond);
-    pthread_mutex_destroy(&fifo_mutex);
 }
 
 void fifo_wait_next() {
@@ -96,7 +96,7 @@ void fifo_wait_next() {
 
 void fifo_wait_full() {
     pthread_mutex_lock(&fifo_mutex);
-    if (!fifo_halted) {
+    while (!fifo_full && !fifo_halted) {
         pthread_cond_wait(&fifo_full_cond, &fifo_mutex);
     }
     pthread_mutex_unlock(&fifo_mutex);
@@ -129,9 +129,10 @@ struct iq_buf *fifo_acquire(void) {
     pthread_mutex_lock(&fifo_mutex);
 
     struct iq_buf *result = NULL;
-    if (!fifo_halted && !fifo_freelist) {
-        pthread_cond_signal(&fifo_full_cond);
-        // No free buffers, wait for one
+    while (!fifo_halted && !fifo_freelist) {
+        // No free buffers: the FIFO is full, wait for one to be released
+        fifo_full = true;
+        pthread_cond_broadcast(&fifo_full_cond);
         pthread_cond_wait(&fifo_free_cond, &fifo_mutex);
     }
 
@@ -175,7 +176,7 @@ struct iq_buf *fifo_dequeue(void) {
     pthread_mutex_lock(&fifo_mutex);
 
     struct iq_buf *result = NULL;
-    if (!fifo_head && !fifo_halted) {
+    while (!fifo_head && !fifo_halted) {
         // No data pending, wait for some
         pthread_cond_wait(&fifo_notempty_cond, &fifo_mutex);
     }

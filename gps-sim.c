@@ -22,6 +22,7 @@
 #include "help.h"
 #include "gui.h"
 #include "sdr.h"
+#include "fifo.h"
 #include "gps-sim.h"
 
 simulator_t simulator;
@@ -220,6 +221,7 @@ static void signal_handler(int sig) {
 
 static void cleanup_and_exit(int code) {
     simulator.gps_thread_exit = true;
+    fifo_halt(); // Unblock the GPS thread if it waits for a free buffer
     if (gps_thread_started) {
         pthread_join(simulator.gps_thread, NULL); /* Wait on GPS read thread exit */
     }

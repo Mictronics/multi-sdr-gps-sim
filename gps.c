@@ -2713,6 +2713,9 @@ void *gps_thread_ep(void *arg) {
 
     // Aquire first fifo block for transfer buffer
     struct iq_buf *iq = fifo_acquire();
+    if (iq == NULL) { // FIFO halted
+        goto end_gps_thread;
+    }
 
     ////////////////////////////////////////////////////////////
     // Generate baseband signals
@@ -2868,6 +2871,9 @@ void *gps_thread_ep(void *arg) {
                     fifo_enqueue(iq);
                     // Get a new one and fill as long as we don't reach IQ_BUFFER_SIZE
                     iq = fifo_acquire();
+                    if (iq == NULL) {
+                        goto end_gps_thread;
+                    }
                 }
                 // We don't enque a partly filled fifo block but keep it for the next round
             }
@@ -2879,6 +2885,9 @@ void *gps_thread_ep(void *arg) {
             fifo_enqueue(iq);
             // Get a new one
             iq = fifo_acquire();
+            if (iq == NULL) {
+                goto end_gps_thread;
+            }
         }
 
         //

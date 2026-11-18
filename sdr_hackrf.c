@@ -221,14 +221,14 @@ int sdr_hackrf_init(simulator_t *simulator) {
 }
 
 void sdr_hackrf_close(void) {
-    fifo_halt();
-    fifo_destroy();
+    fifo_halt(); // Unblocks the TX callback so hackrf_stop_tx can return
     if (device != NULL) {
         hackrf_stop_tx(device);
         hackrf_set_amp_enable(device, 0);
         hackrf_set_txvga_gain(device, 0);
         hackrf_close(device);
     }
+    fifo_destroy();
     if (list != NULL) {
         hackrf_device_list_free(list);
     }

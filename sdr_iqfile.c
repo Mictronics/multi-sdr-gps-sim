@@ -67,10 +67,10 @@ int sdr_iqfile_init(simulator_t *simulator) {
 void sdr_iqfile_close(void) {
     iqfile_thread_exit = true;
     fifo_halt();
-    fifo_destroy();
     if (thread_started) {
         pthread_join(iqfile_thread, NULL);
     }
+    fifo_destroy();
 }
 
 int sdr_iqfile_run(void) {
