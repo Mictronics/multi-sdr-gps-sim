@@ -29,6 +29,12 @@ Derived from Takuji Ebinuma's gps-sdr-sim. The program synthesizes GPS L1 C/A ba
 - `almanac.c` — reads SEM-format almanac (`almanac.sem`) and scales values into the subframe 4/5 pages (recent bug fixes were in this scaling).
 - `gui.c` — curses/panel TUI: status windows and interactive position changes in real time.
 
+Things that are easy to get wrong when changing the stream (found on real phones, not by unit tests):
+- Ephemeris and almanac in the stream must agree (they differ by 1-2 km for fresh data). `-s now` therefore only shifts a nav file's times to the start time when fewer than `COVER_MIN_SATS` satellites have a record within `EPH_MAX_AGE` of it (an old file); shifting fresh data put the satellites ~26,000 km away from the almanac and phones distrusted them.
+- Each channel sends one almanac page (subframe 4/5, 25 pages) per 30 s frame, so a receiver gets a given PRN's almanac about `30 * (page index)` s after the start and everything after 12.5 minutes. Subframe 4 page 18 (iono/UTC/leap seconds) first airs after about 8.5 minutes.
+- Missing iono/UTC/leap data in a RINEX header is filled by `ionoDefaults` with neutral values (leap seconds `LEAP_DEFAULT_DTLS`, 18 s; update it when a new leap second is introduced). Groups the file provides are kept and applied to the simulated delays too.
+- The simulator models a simple ionosphere delay and no troposphere, and its GPS time is the UTC calendar time without the 18 s offset (`date2gps` is applied to UTC); a phone's height can be off by some metres because of this.
+
 Data flow: RINEX/almanac → `gps.c` channel + nav-message state → IQ buffers → FIFO → SDR TX thread. Position comes from `--geo-loc`, a motion file (`-m`, e.g. `circle.csv`), `--target` or TUI input.
 
 The working directory also collects untracked build artifacts (`*.o`, `gps-sim`) and data files (`*.gz` RINEX files, `almanac.sem`, `iqdata.bin`); downloads with `-f` overwrite `rinex2.gz`, `rinex3.gz` and `almanac.sem` there. `circle.csv` is a tracked sample motion file for `-m`.
