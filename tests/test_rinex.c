@@ -106,6 +106,9 @@ static void test_sorted_by_satellite(void) {
     expect_int("tot", io.tot, 405504);
     expect_int("wnt", io.wnt, 2445);
     expect_int("dtls", io.dtls, 18);
+    expect_int("dtlsf", io.dtlsf, 18);
+    expect_int("wnlsf", io.wnlsf, 1929);
+    expect_int("dn", io.dn, 7);
     expect_int("iono/UTC valid", io.vflg, 1);
 
     // Every set holds both GPS satellites and nothing else (E05 is skipped)
@@ -251,6 +254,48 @@ static void test_rejected_files(void) {
     expect_int("no file name", read_file(NULL, eph, true), -1);
 }
 
+/* Read the header with its LEAP SECONDS line replaced by "text" (may hold several lines). */
+static void read_with_leap_line(const char *text) {
+    int leap = -1;
+
+    for (int i = 0; i < first_record; i++)
+        if (strstr(lines[i], "LEAP SECONDS"))
+            leap = i;
+
+    char *original = lines[leap];
+    lines[leap] = (char *) text;
+    read_file(write_temp(NULL, 0), eph, true);
+    lines[leap] = original;
+}
+
+static void test_leap_seconds(void) {
+    // All four values: the offset, the one after the event, its week and day of week
+    read_with_leap_line("    19    20  2000     3                                    LEAP SECONDS");
+    expect_int("leap: dtls", io.dtls, 19);
+    expect_int("leap: dtlsf", io.dtlsf, 20);
+    expect_int("leap: wnlsf", io.wnlsf, 2000);
+    expect_int("leap: dn", io.dn, 3);
+    expect_int("leap: valid", io.vflg, 1);
+
+    // Only the offset, as in RINEX 2 files: the last known event is assumed
+    read_with_leap_line("    18                                                      LEAP SECONDS");
+    expect_int("offset only: dtls", io.dtls, 18);
+    expect_int("offset only: dtlsf", io.dtlsf, 18);
+    expect_int("offset only: wnlsf", io.wnlsf, 1929);
+    expect_int("offset only: dn", io.dn, 7);
+
+    // A line for another system must not replace the GPS values
+    read_with_leap_line("    18    18  1929     7                                    LEAP SECONDS\n"
+            "    14    14  1000     2BDS                                 LEAP SECONDS");
+    expect_int("other system ignored: dtls", io.dtls, 18);
+    expect_int("other system ignored: wnlsf", io.wnlsf, 1929);
+    expect_int("other system ignored: dn", io.dn, 7);
+
+    // No GPS line at all: the iono/UTC parameters are not complete
+    read_with_leap_line("    14    14  1000     2BDS                                 LEAP SECONDS");
+    expect_int("only another system: valid", io.vflg, 0);
+}
+
 int main(void) {
     load_sample();
     if (nlines < 20 || first_record == 0) {
@@ -262,6 +307,7 @@ int main(void) {
     test_order_independent();
     test_bad_records();
     test_rejected_files();
+    test_leap_seconds();
 
     if (temp_made)
         unlink(temp_path);

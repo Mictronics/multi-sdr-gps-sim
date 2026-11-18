@@ -27,7 +27,7 @@ static void expect(const char *what, unsigned long got, unsigned long want) {
 int main(void) {
     static ephem_t eph; static ionoutc_t io; almanac_gps_t *alm = almanac_init();
     eph.vflg = 1; eph.svh = 0x2B; eph.iodc = 0x2AB; eph.sqrta = 5153.7; eph.ecc = 0.01; eph.toe.week = 2445;
-    io.vflg = 1; io.dtls = 19; // 19 differs from the old hard-coded 18
+    io.vflg = 1; io.dtls = 18; io.dtlsf = 19; io.wnlsf = 2000; io.dn = 3; // None of these equals the old constants
     unsigned health[MAX_SAT] = {0};
     for (int sv = 0; sv < MAX_SAT; sv++) {
         health[sv] = (sv * 7 + 3) % 64; // distinct, 6 bit
@@ -57,9 +57,9 @@ int main(void) {
     expect("SF5 page PRN5 SV id", field(4 + 4 * 2, 63, 6), 5);
     expect("SF4 page PRN26 SV id", field(3 + 2 * 2, 63, 6), 26);
     // Leap seconds, SF4 page 18: dtls, WNlsf, DN in word 9, dtlsf in word 10
-    expect("SF4 p18 dtls", field(3 + 17 * 2, 241, 8), 19);
-    expect("SF4 p18 WNlsf", field(3 + 17 * 2, 249, 8), 1929 % 256);
-    expect("SF4 p18 DN", field(3 + 17 * 2, 257, 8), 7);
+    expect("SF4 p18 dtls", field(3 + 17 * 2, 241, 8), 18);
+    expect("SF4 p18 WNlsf", field(3 + 17 * 2, 249, 8), 2000 % 256);
+    expect("SF4 p18 DN", field(3 + 17 * 2, 257, 8), 3);
     expect("SF4 p18 dtlsf", field(3 + 17 * 2, 271, 8), 19);
     printf(failures ? "%d FAILURES\n" : "all checks passed\n", failures);
     return failures != 0;

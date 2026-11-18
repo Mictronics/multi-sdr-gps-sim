@@ -172,6 +172,7 @@ typedef struct {
     double beta0, beta1, beta2, beta3;
     double A0, A1;
     int dtls, tot, wnt;
+    int dtlsf, wnlsf, dn; /* Leap second offset after the last or next event, its GPS week and day of week (1 = Sunday) */
 } ionoutc_t;
 
 typedef struct {

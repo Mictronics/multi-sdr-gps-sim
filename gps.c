@@ -25,6 +25,10 @@
 #include "almanac.h"
 #include "gps-sim.h"
 
+// Last leap second event, 2016/12/31: used when a RINEX header gives no WN_LSF and DN.
+#define LEAP_DEFAULT_WN 1929
+#define LEAP_DEFAULT_DN 7
+
 static char rinex_date[21];
 
 const int sinTable512[] = {
@@ -564,11 +568,9 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
     dtls = (signed long) (ionoutc.dtls);
     tot = (unsigned long) (ionoutc.tot / 4096);
     wnt = (unsigned long) (ionoutc.wnt % 256);
-    // WNlsf and DN describe the last leap second (2016/12/31, DN counts days from 1 = Sunday).
-    // With none scheduled, the offset after it equals the current one from the RINEX header.
-    wnlsf = 1929 % 256;
-    dn = 7;
-    dtlsf = dtls;
+    wnlsf = (unsigned long) (ionoutc.wnlsf % 256);
+    dn = (unsigned long) ionoutc.dn;
+    dtlsf = (signed long) (ionoutc.dtlsf);
 
     // Subframe 1
     sbf[0][0] = 0x8B0000UL << 6;
@@ -973,8 +975,18 @@ static int readRinexHeader(gzFile fp, ionoutc_t *ionoutc, bool rinex3) {
             ionoutc->wnt = (int) rinexField(str, 45, 6);
             if (ionoutc->tot % 4096 == 0)
                 flags |= 0x1 << 2;
-        } else if (rinexLabel(str, "LEAP SECONDS")) {
+        } else if (rinexLabel(str, "LEAP SECONDS") && (strncmp(str + 24, "   ", 3) == 0 || strncmp(str + 24, "GPS", 3) == 0)) {
+            // Lines for other systems carry a system id after the four I6 values
             ionoutc->dtls = (int) rinexField(str, 0, 6);
+            // The last event is optional; without it assume the 2016/12/31 one, after which the offset is unchanged
+            ionoutc->dtlsf = ionoutc->dtls;
+            ionoutc->wnlsf = LEAP_DEFAULT_WN;
+            ionoutc->dn = LEAP_DEFAULT_DN;
+            if (rinexField(str, 12, 6) > 0) {
+                ionoutc->dtlsf = (int) rinexField(str, 6, 6);
+                ionoutc->wnlsf = (int) rinexField(str, 12, 6);
+                ionoutc->dn = (int) rinexField(str, 18, 6);
+            }
             flags |= 0x1 << 3;
         }
     }
@@ -1785,7 +1797,7 @@ static bool loadEphemeris(gps_ctx_t *c) {
                     io->beta0, io->beta1, io->beta2, io->beta3);
             gui_mvwprintw(LS_FIX, LS_ROW_IONO + 2, LS_COL_INFO, "DELTA UTC %12.3e %12.3e %9d  %9d",
                     io->A0, io->A1, io->tot, io->wnt);
-            gui_mvwprintw(LS_FIX, LS_ROW_IONO + 3, LS_COL_INFO, "LEAP SECONDS %d", io->dtls);
+            gui_mvwprintw(LS_FIX, LS_ROW_IONO + 3, LS_COL_INFO, "LEAP SECONDS %d, then %d (week %d, day %d)", io->dtls, io->dtlsf, io->wnlsf, io->dn);
         } else {
             gui_mvwprintw(LS_FIX, LS_ROW_IONO, LS_COL_INFO, "Ionospheric data invalid or disabled!");
         }
