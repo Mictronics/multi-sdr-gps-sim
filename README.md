@@ -126,6 +126,22 @@ SDR device types (use with --radio or -r option):
     plutosdr
 ````
 
+### Hardware test and practical notes
+
+Tested with a HackRF One (firmware 2026.01.3) at 3 MS/s, TX gain 14 dB, amplifier off, the output going through a cable with 60 dB of attenuation to a Pixel 4 phone. All simulated satellites were tracked at 30 to 45 dB-Hz, the phone locked within a minute with almanac, ephemeris and "used in fix" flags on every satellite, reported the commanded position to about 1.3 m horizontally and the correct time. Its height was about 15 m low: the simulator only models a simple ionosphere delay and no troposphere, and phones apply their own models.
+
+```
+mkdir -p ~/gps-tx && cd ~/gps-tx
+gps-sim -f -s now -l 48.0,10.0,500 -r hackrf -g 14 -d 1800
+```
+
+- Run it from a separate directory: `-f` overwrites `rinex2.gz`, `rinex3.gz` and `almanac.sem` in the working directory.
+- With `-s now` and a fresh download the ephemeris is used as it is, so the simulated satellites are the ones the almanac puts above the horizon at that place. An old nav file is shifted to the current time instead, which makes the simulated satellites disagree with a real almanac; receivers that use assistance data may then distrust them. Use fresh data for receiver tests.
+- Keep the gain constant for the first minutes. A cold receiver needs 30 to 60 s of signal for the ephemeris and about 12.5 minutes for the whole almanac. In the program `t` and `g` raise and lower the gain by 1 dB and `x` quits.
+- Leave the amplifier (`-a`) off.
+
+Transmitting on the GPS L1 frequency is regulated in most countries and disturbs every receiver within reach. Keep the output conducted (cable and attenuation, a DC block if the receiver powers an active antenna), use the lowest gain that works, keep runs short and do not attach an antenna. Phones have no antenna connector, so even a cabled setup radiates a little.
+
 ### License
 
 Copyright &copy; 2021 Mictronics
