@@ -3,6 +3,7 @@
  * used by gnss-sdr): SV health, almanac health, SV id and leap seconds.
  * Run with "make test".
  */
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include "gps-sim.h"
@@ -23,6 +24,38 @@ static unsigned long field(int page, int start, int len) {
 }
 static void expect(const char *what, unsigned long got, unsigned long want) {
     if (got != want) { printf("FAIL %-34s got %lu want %lu\n", what, got, want); failures++; }
+}
+
+static long sfield(int page, int start, int len) {
+    long v = (long) field(page, start, len);
+    return (v >> (len - 1)) ? v - (1L << len) : v;
+}
+
+static void near(const char *what, double got, double want, double lsb) {
+    if (fabs(got - want) >= lsb) { printf("FAIL %-34s got %.12g want %.12g (1 LSB %.3g)\n", what, got, want, lsb); failures++; }
+}
+
+/* Almanac pages: every field read back with the IS-GPS-200 bit positions and scale factors must be
+ * the value that was put in, within one LSB. words 3-10 start at bit 61, 91, 121, ... of the page. */
+static void check_almanac_page(int page, int prn, const almanac_prn_t *a) {
+    char w[48];
+    #define CHK(name, got, want, lsb) do { snprintf(w, sizeof (w), "PRN%d %s", prn, name); near(w, got, want, lsb); } while (0)
+    expect("almanac page data id", field(page, 61, 2), 1);
+    expect("almanac page SV id", field(page, 63, 6), (unsigned long) prn);
+    CHK("e", field(page, 69, 16) * pow(2, -21), a->e, pow(2, -21));
+    CHK("toa", field(page, 91, 8) * 4096.0, a->toa.sec, 4096.0);
+    CHK("delta i", sfield(page, 99, 16) * pow(2, -19), a->delta_i, pow(2, -19));
+    CHK("omega dot", sfield(page, 121, 16) * pow(2, -38), a->omegadot, pow(2, -38));
+    expect("almanac health", field(page, 137, 8), a->health);
+    CHK("sqrt A", field(page, 151, 24) * pow(2, -11), a->sqrta, pow(2, -11));
+    CHK("omega 0", sfield(page, 181, 24) * pow(2, -23), a->omega0, pow(2, -23));
+    CHK("omega", sfield(page, 211, 24) * pow(2, -23), a->aop, pow(2, -23));
+    CHK("M0", sfield(page, 241, 24) * pow(2, -23), a->m0, pow(2, -23));
+    long af0 = (long) ((field(page, 271, 8) << 3) | field(page, 290, 3));
+    if (af0 >> 10) af0 -= 1L << 11;
+    CHK("af0", af0 * pow(2, -20), a->af0, pow(2, -20));
+    CHK("af1", sfield(page, 279, 11) * pow(2, -38), a->af1, pow(2, -38));
+    #undef CHK
 }
 
 int main(void) {
@@ -78,6 +111,21 @@ int main(void) {
     expect("defaults: WNlsf", field(3 + 17 * 2, 249, 8), 1929 % 256);
     expect("defaults: DN", field(3 + 17 * 2, 257, 8), 7);
     expect("defaults: dtlsf", field(3 + 17 * 2, 271, 8), 18);
+
+    // Almanac pages for one satellite in subframe 5 (PRN 5) and one in subframe 4 (PRN 27)
+    almanac_gps_t *al = almanac_init();
+    almanac_prn_t *p5 = &al->sv[4], *p27 = &al->sv[26];
+    *p5 = (almanac_prn_t) {.valid = 1, .svid = 5, .health = 21, .e = 0.0123, .delta_i = -0.0123, .omegadot = -2.6e-9, .sqrta = 5153.62,
+        .omega0 = -0.7123, .aop = 0.3456, .m0 = -0.9871, .af0 = -1.2e-4, .af1 = -3.1e-12, .toa = {2445, 503808.0}};
+    *p27 = (almanac_prn_t) {.valid = 1, .svid = 27, .health = 0, .e = 0.00321, .delta_i = 0.0087, .omegadot = -2.9e-9, .sqrta = 5153.9,
+        .omega0 = 0.4567, .aop = -0.1234, .m0 = 0.8123, .af0 = 2.6e-5, .af1 = 1.1e-12, .toa = {2445, 503808.0}};
+    al->valid = 1;
+    eph2sbf(eph, io, al, sbf);
+    check_almanac_page(4 + 4 * 2, 5, p5);   // subframe 5, page 5
+    check_almanac_page(3 + 3 * 2, 27, p27); // subframe 4, page 4
+    expect("SF5 page 25 SV id", field(4 + 24 * 2, 63, 6), 51);
+    expect("SF5 page 25 toa", field(4 + 24 * 2, 69, 8), 503808 / 4096);
+    expect("SF5 page 25 WNa", field(4 + 24 * 2, 77, 8), 2445 % 256);
 
     printf(failures ? "%d FAILURES\n" : "all checks passed\n", failures);
     return failures != 0;
