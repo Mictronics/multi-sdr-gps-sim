@@ -1268,6 +1268,11 @@ static int readRinex2(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fn
         strncpy(tmp, str, 2);
         tmp[2] = 0;
         sv = atoi(tmp) - 1;
+        if (sv < 0 || sv >= MAX_SAT) {
+            // Skip the 7 broadcast orbit lines of this record
+            for (int skip = 0; skip < 7 && gzgets(fp, str, MAX_CHAR) != NULL; skip++);
+            continue;
+        }
 
         // EPOCH
         strncpy(tmp, str + 3, 2);
@@ -1306,8 +1311,10 @@ static int readRinex2(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fn
             g0 = g;
             ieph++; // a new set of ephemerides
 
-            if (ieph >= EPHEM_ARRAY_SIZE)
+            if (ieph >= EPHEM_ARRAY_SIZE) {
+                ieph = EPHEM_ARRAY_SIZE - 1; // Table full; the count below adds one
                 break;
+            }
         }
 
         // Date and time
@@ -1657,6 +1664,9 @@ static int readRinex3(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fn
         strncpy(tmp, str + 1, 2);
         tmp[2] = 0;
         sv = atoi(tmp) - 1;
+        if (sv < 0 || sv >= MAX_SAT) {
+            continue; // continuation lines are skipped by the 'G' check above
+        }
 
         // EPOCH
         strncpy(tmp, str + 4, 4);
@@ -1695,8 +1705,10 @@ static int readRinex3(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fn
             g0 = g;
             ieph++; // a new set of ephemerides
 
-            if (ieph >= EPHEM_ARRAY_SIZE)
+            if (ieph >= EPHEM_ARRAY_SIZE) {
+                ieph = EPHEM_ARRAY_SIZE - 1; // Table full; the count below adds one
                 break;
+            }
         }
 
         // Date and time
@@ -2264,7 +2276,7 @@ static int readUserMotion(double xyz[USER_MOTION_SIZE][3], const char *filename)
         if (fgets(str, MAX_CHAR, fp) == NULL)
             break;
 
-        if (EOF == sscanf(str, "%lf,%lf,%lf,%lf", &t, &x, &y, &z)) // Read CSV line
+        if (sscanf(str, "%lf,%lf,%lf,%lf", &t, &x, &y, &z) != 4) // Read CSV line
             break;
 
         xyz[numd][0] = x;
@@ -2293,7 +2305,9 @@ void *gps_thread_ep(void *arg) {
     gpstime_t g0;
     gpstime_t gtmp;
     g0.week = -1; // Invalid start time
-    date2gps(&simulator->start, &g0);
+    if (simulator->start.m >= 1) { // Zero month means no -s given
+        date2gps(&simulator->start, &g0);
+    }
 
     double elvmask = 0.0; // in degree
     const double delt = 1.0 / (double) TX_SAMPLERATE;
@@ -2467,10 +2481,12 @@ void *gps_thread_ep(void *arg) {
         }
     }
 
+    // The FTP download is stored as RINEX2_FILE_NAME and takes precedence over -e
+    const char *nav_file = simulator->use_ftp ? RINEX2_FILE_NAME : simulator->nav_file_name;
     if (simulator->use_rinex3) {
-        neph = readRinex3(eph, &ionoutc, simulator->nav_file_name);
+        neph = readRinex3(eph, &ionoutc, nav_file);
     } else {
-        neph = readRinex2(eph, &ionoutc, simulator->nav_file_name);
+        neph = readRinex2(eph, &ionoutc, nav_file);
     }
 
     if (neph == 0) {
