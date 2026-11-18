@@ -507,6 +507,11 @@ static void satpos(ephem_t eph, gpstime_t g, double *pos, double *vel, double *c
     return;
 }
 
+/* Place a 6-bit SV health value in slot 0-3 (first to last) of a 24 bit data word */
+static unsigned long healthSlot(unsigned long health, int slot) {
+    return (health & 0x3FUL) << (24 - 6 * slot);
+}
+
 /* Compute Subframe from Ephemeris
  * eph Ephemeris of given SV
  * sbf Array of five sub-frames, 10 long words each
@@ -538,6 +543,7 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
     long tgd;
 
     unsigned long ura = 0UL;
+    unsigned long svh = (unsigned long) eph.svh;
     unsigned long dataId = 1UL;
 
     unsigned long wna;
@@ -593,17 +599,16 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
     dtls = (signed long) (ionoutc.dtls);
     tot = (unsigned long) (ionoutc.tot / 4096);
     wnt = (unsigned long) (ionoutc.wnt % 256);
-    // TO DO: Specify scheduled leap seconds in command options
-    // 2016/12/31 (Sat) -> WNlsf = 1929, DN = 7 (http://navigationservices.agi.com/GNSSWeb/)
-    // Days are counted from 1 to 7 (Sunday is 1).
+    // WNlsf and DN describe the last leap second (2016/12/31, DN counts days from 1 = Sunday).
+    // With none scheduled, the offset after it equals the current one from the RINEX header.
     wnlsf = 1929 % 256;
     dn = 7;
-    dtlsf = 18;
+    dtlsf = dtls;
 
     // Subframe 1
     sbf[0][0] = 0x8B0000UL << 6;
     sbf[0][1] = 0x1UL << 8;
-    sbf[0][2] = ((wn & 0x3FFUL) << 20) | (ura << 14) | (((iodc >> 8)&0x3UL) << 6);
+    sbf[0][2] = ((wn & 0x3FFUL) << 20) | (ura << 14) | ((svh & 0x3FUL) << 8) | (((iodc >> 8)&0x3UL) << 6);
     sbf[0][3] = 0UL;
     sbf[0][4] = 0UL;
     sbf[0][5] = 0UL;
@@ -690,7 +695,7 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
             sbf[3 + i * 2][1] = 0x4UL << 8; // Subframe ID for HOW
             sbf[3 + i * 2][2] = (dataId << 28) | (svId << 22) | ((ecc & 0xFFFFUL) << 6);
             sbf[3 + i * 2][3] = ((toa & 0xFFUL) << 22) | ((delta_i & 0xFFFFUL) << 6);
-            sbf[3 + i * 2][4] = ((omegadot & 0xFFFFUL) << 14); // SV HEALTH = 000 (ALL DATA OK)
+            sbf[3 + i * 2][4] = ((omegadot & 0xFFFFUL) << 14) | ((unsigned long) alm->sv[sv].health << 6);
             sbf[3 + i * 2][5] = ((sqrta & 0xFFFFFFUL) << 6);
             sbf[3 + i * 2][6] = ((omega0 & 0xFFFFFFUL) << 6);
             sbf[3 + i * 2][7] = ((aop & 0xFFFFFFUL) << 6);
@@ -725,6 +730,16 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
     sbf[3 + 24 * 2][8] = 0UL;
     sbf[3 + 24 * 2][9] = 0UL;
 
+    // Health of PRN 25 to 32: PRN 25 in word 8, PRN 26-29 in word 9, PRN 30-32 in word 10
+    for (sv = 24; sv < MAX_SAT; sv++) {
+        if (alm->sv[sv].valid != 0) {
+            int k = sv - 24;
+            int word = (k == 0) ? 7 : (k <= 4 ? 8 : 9);
+            int slot = (k == 0) ? 3 : (k <= 4 ? k - 1 : k - 5);
+            sbf[3 + 24 * 2][word] |= healthSlot(alm->sv[sv].health, slot);
+        }
+    }
+
     // Subframe 5, page 1-24: almanac data for PRN 1 through 24
     for (sv = 0; sv < 24; sv++) {
         i = sv;
@@ -746,7 +761,7 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
             sbf[4 + i * 2][1] = 0x5UL << 8; // Subframe ID
             sbf[4 + i * 2][2] = (dataId << 28) | (svId << 22) | ((ecc & 0xFFFFUL) << 6);
             sbf[4 + i * 2][3] = ((toa & 0xFFUL) << 22) | ((delta_i & 0xFFFFUL) << 6);
-            sbf[4 + i * 2][4] = ((omegadot & 0xFFFFUL) << 14); // SV HEALTH = 000 (ALL DATA OK)
+            sbf[4 + i * 2][4] = ((omegadot & 0xFFFFUL) << 14) | ((unsigned long) alm->sv[sv].health << 6);
             sbf[4 + i * 2][5] = ((sqrta & 0xFFFFFFUL) << 6);
             sbf[4 + i * 2][6] = ((omega0 & 0xFFFFFFUL) << 6);
             sbf[4 + i * 2][7] = ((aop & 0xFFFFFFUL) << 6);
@@ -778,6 +793,13 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
     sbf[4 + 24 * 2][7] = 0UL;
     sbf[4 + 24 * 2][8] = 0UL;
     sbf[4 + 24 * 2][9] = 0UL;
+
+    // Health of PRN 1 to 24: four 6-bit values per word, words 4 to 9
+    for (sv = 0; sv < 24; sv++) {
+        if (alm->sv[sv].valid != 0) {
+            sbf[4 + 24 * 2][3 + sv / 4] |= healthSlot(alm->sv[sv].health, sv % 4);
+        }
+    }
 }
 
 /* Count number of bits set to 1

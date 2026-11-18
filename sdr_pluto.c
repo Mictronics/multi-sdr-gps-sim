@@ -176,9 +176,8 @@ int sdr_pluto_init(simulator_t *simulator) {
     // Limit user gain to Pluto constrains
     if (simulator->tx_gain > PLUTO_TX_GAIN_MAX) simulator->tx_gain = PLUTO_TX_GAIN_MAX;
     if (simulator->tx_gain < PLUTO_TX_GAIN_MIN) simulator->tx_gain = PLUTO_TX_GAIN_MIN;
-    // Change the freq and sample rate to correct the crystal clock error.
-    uint64_t freq_gps_hz = TX_FREQUENCY;
-    freq_gps_hz = freq_gps_hz * (10000000 - simulator->ppb) / 10000000;
+    // Change the freq to correct the crystal clock error.
+    uint64_t freq_gps_hz = sdr_corrected_frequency(simulator->ppb);
 
     phydev = iio_context_find_device(ctx, "ad9361-phy");
     struct iio_channel* phy_chn = iio_device_find_channel(phydev, "voltage0", true);

@@ -176,6 +176,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
                 return ARGP_ERR_UNKNOWN;
             }
             simulator.ppb = parse_int(arg, state, "ppb");
+            if (abs(simulator.ppb) > 1000000) { // 1000 ppm, far beyond any crystal error
+                argp_error(state, "Oscillator error %d ppb is out of range (+-1000000).", simulator.ppb);
+            }
             break;
         case 700: // --iq16
             simulator.sample_size = SC16;
