@@ -904,102 +904,6 @@ static unsigned long countBits(unsigned long v) {
     return (c);
 }
 
-static int decode_wordN(unsigned int word) {
-    const unsigned int hamming[] = {
-        0xBB1F3480, 0x5D8F9A40, 0xAEC7CD00, 0x5763E680, 0x6BB1F340, 0x8B7A89C0
-    };
-    unsigned int parity = 0, w;
-    int i;
-
-    if (word & 0x40000000) word ^= 0x3FFFFFC0;
-
-    for (i = 0; i < 6; i++) {
-        parity <<= 1;
-        for (w = (word & hamming[i]) >> 6; w; w >>= 1) parity ^= w & 1;
-    }
-    if (parity != (word & 0x3F)) return 0;
-
-    //for (i=0;i<3;i++) data[i]=(unsigned char)(word>>(22-i*8));
-    return 1;
-}
-
-static bool validate_parityN(unsigned int W) {
-
-    // Parity stuff 
-
-    static const unsigned int PARITY_25 = 0xBB1F3480;
-    static const unsigned int PARITY_26 = 0x5D8F9A40;
-    static const unsigned int PARITY_27 = 0xAEC7CD00;
-    static const unsigned int PARITY_28 = 0x5763E680;
-    static const unsigned int PARITY_29 = 0x6BB1F340;
-    static const unsigned int PARITY_30 = 0x8B7A89C0;
-
-    // Look-up table for parity of eight bit bytes
-    // (parity=0 if the number of 0s and 1s is equal, else parity=1)
-    static unsigned char byteParity[] = {
-        0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
-        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
-        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
-        0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
-        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
-        0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
-        0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
-        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0
-    };
-
-    // Local variables
-
-    unsigned int t, w, p;
-
-    // The sign of the data is determined by the D30* parity bit 
-    // of the previous data word. If  D30* is set, invert the data 
-    // bits D01..D24 to obtain the d01..d24 (but leave all other
-    // bits untouched).
-
-    w = W;
-    if (w & 0x40000000) w ^= 0x3FFFFFC0;
-
-    // Compute the parity of the sign corrected data bits d01..d24
-    // as described in the ICD-GPS-200
-
-    t = w & PARITY_25;
-    p = (byteParity[t & 0xff] ^ byteParity[(t >> 8) & 0xff] ^
-            byteParity[(t >> 16) & 0xff] ^ byteParity[(t >> 24)]);
-
-    t = w & PARITY_26;
-    p = (p << 1) |
-            (byteParity[t & 0xff] ^ byteParity[(t >> 8) & 0xff] ^
-            byteParity[(t >> 16) & 0xff] ^ byteParity[(t >> 24)]);
-
-    t = w & PARITY_27;
-    p = (p << 1) |
-            (byteParity[t & 0xff] ^ byteParity[(t >> 8) & 0xff] ^
-            byteParity[(t >> 16) & 0xff] ^ byteParity[(t >> 24)]);
-
-    t = w & PARITY_28;
-    p = (p << 1) |
-            (byteParity[t & 0xff] ^ byteParity[(t >> 8) & 0xff] ^
-            byteParity[(t >> 16) & 0xff] ^ byteParity[(t >> 24)]);
-
-    t = w & PARITY_29;
-    p = (p << 1) |
-            (byteParity[t & 0xff] ^ byteParity[(t >> 8) & 0xff] ^
-            byteParity[(t >> 16) & 0xff] ^ byteParity[(t >> 24)]);
-
-    t = w & PARITY_30;
-    p = (p << 1) |
-            (byteParity[t & 0xff] ^ byteParity[(t >> 8) & 0xff] ^
-            byteParity[(t >> 16) & 0xff] ^ byteParity[(t >> 24)]);
-
-    if ((W & 0x3f) != p) {
-        gui_status_wprintw(RED, "%d-%u ", (W & 0x3f), p);
-    }
-    if (!decode_wordN(W)) {
-        gui_status_wprintw(RED, "%d-%u ", (W & 0x3f), p);
-    }
-    return ((W & 0x3f) == p);
-};
-
 /* Compute the Checksum for one given word of a subframe
  * source The input data
  * nib Does this word contain non-information-bearing bits?
@@ -1066,8 +970,6 @@ static unsigned long computeChecksum(unsigned long source, int nib) {
 
     D &= 0x3FFFFFFFUL;
     D |= (source & 0xC0000000UL); // Add D29* and D30* from source data bits
-    unsigned int W = D;
-    validate_parityN(W);
     return (D);
 }
 
@@ -2321,8 +2223,6 @@ void *gps_thread_ep(void *arg) {
     ionoutc_t ionoutc;
     ionoutc.enable = simulator->ionosphere_enable;
 
-    bool sat_simulated[33] = {false};
-
     int start_y = 4; // Row to start output in LS_FIX window/panel
     int ibs; // boresight angle index    
     int igrx;
@@ -2695,8 +2595,6 @@ void *gps_thread_ep(void *arg) {
             gui_mvwprintw(LS_FIX, start_y++, 1, "%02d %6.1f %5.1f %11.1f %5.1f", chan[i].prn,
                     chan[i].azel[0] * R2D, chan[i].azel[1] * R2D, chan[i].rho0.d, chan[i].rho0.iono_delay);
         }
-
-        sat_simulated[chan[i].prn] = true;
     }
     gui_mvwprintw(LS_FIX, 3, 40, "Nav: %02d satellites", start_y - 4);
 
@@ -2942,14 +2840,11 @@ void *gps_thread_ep(void *arg) {
                 gui_mvwprintw(LS_FIX, 5, 40, "xyz = %11.1f, %11.1f, %11.1f", xyz[iumd][0], xyz[iumd][1], xyz[iumd][2]);
                 gui_mvwprintw(LS_FIX, 6, 40, "llh = %11.6f, %11.6f, %11.1f", llh[0] * R2D, llh[1] * R2D, llh[2]);
                 start_y = 4;
-                for (i = 0; i < 33; i++) sat_simulated[i] = false;
                 for (i = 0; i < MAX_CHAN; i++) {
                     if (chan[i].prn > 0) {
                         gui_mvwprintw(LS_FIX, start_y++, 1, "%02d %6.1f %5.1f %11.1f %5.1f", chan[i].prn,
                                 chan[i].azel[0] * R2D, chan[i].azel[1] * R2D, chan[i].rho0.d, chan[i].rho0.iono_delay);
                     }
-
-                    sat_simulated[chan[i].prn] = true;
                 }
 
                 gui_mvwprintw(LS_FIX, 3, 40, "Nav: %02d satellites", start_y - 4);
