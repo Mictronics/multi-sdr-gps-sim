@@ -41,6 +41,10 @@ void fifo_wait_next();
 // Block until the producer has used up all free buffers once, or the FIFO is halted.
 void fifo_wait_full();
 
+// Tell waiters the producer has stopped, so fifo_wait_full returns even if the FIFO never filled.
+// Queued buffers stay available to the consumer.
+void fifo_producer_done();
+
 // Mark the FIFO as halted. Move any buffers in FIFO to the freelist immediately.
 void fifo_halt();
 

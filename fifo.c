@@ -102,6 +102,13 @@ void fifo_wait_full() {
     pthread_mutex_unlock(&fifo_mutex);
 }
 
+void fifo_producer_done() {
+    pthread_mutex_lock(&fifo_mutex);
+    fifo_full = true;
+    pthread_cond_broadcast(&fifo_full_cond);
+    pthread_mutex_unlock(&fifo_mutex);
+}
+
 void fifo_halt() {
     pthread_mutex_lock(&fifo_mutex);
 

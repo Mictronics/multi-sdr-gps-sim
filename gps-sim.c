@@ -237,6 +237,15 @@ static void signal_handler(int sig) {
     simulator.main_exit = true;
 }
 
+/* Turn the target heading; the bearing is kept in thousandths of a degree. */
+static void change_bearing(double delta) {
+    double bearing = fmod(simulator.target.bearing + delta, 360000.0);
+    if (bearing < 0.0)
+        bearing += 360000.0;
+    simulator.target.bearing = bearing;
+    gui_show_heading((float) (bearing / 1000));
+}
+
 static void change_gain(int delta) {
     int gain = sdr_set_gain(simulator.tx_gain + delta);
     if (gain == SDR_GAIN_UNSUPPORTED) {
@@ -407,16 +416,10 @@ int main(int argc, char** argv) {
                     gui_top_panel(KF_FIX);
                     break;
                 case LEFT_KEY:
-                    simulator.target.bearing -= 127.0;
-                    if (simulator.target.bearing < 0) simulator.target.bearing = 360000.0;
-                    if (simulator.target.bearing > 360000) simulator.target.bearing = 0;
-                    gui_show_heading((float) (simulator.target.bearing / 1000));
+                    change_bearing(-127.0);
                     break;
                 case RIGHT_KEY:
-                    simulator.target.bearing += 127.0;
-                    if (simulator.target.bearing < 0) simulator.target.bearing = 360000.0;
-                    if (simulator.target.bearing > 360000) simulator.target.bearing = 0;
-                    gui_show_heading((float) (simulator.target.bearing / 1000));
+                    change_bearing(127.0);
                     break;
                 case UP_KEY:
                     simulator.target.vertical_speed += 1;

@@ -266,7 +266,7 @@ static void xyz2llh(const double *xyz, double *llh) {
     eps = 1.0e-3;
     e2 = e*e;
 
-    if (normVect(xyz) < eps) {
+    if (!isfinite(normVect(xyz)) || normVect(xyz) < eps) {
         // Invalid ECEF vector
         llh[0] = 0.0;
         llh[1] = 0.0;
@@ -282,7 +282,7 @@ static void xyz2llh(const double *xyz, double *llh) {
     rho2 = x * x + y*y;
     dz = e2*z;
 
-    while (1) {
+    for (int iter = 0; iter < 20; iter++) { // Converges in a few steps
         zdz = z + dz;
         nh = sqrt(rho2 + zdz * zdz);
         slat = zdz / nh;
@@ -441,8 +441,8 @@ static void satpos(ephem_t eph, gpstime_t g, double *pos, double *vel, double *c
     ek = mk;
     ekold = ek + 1.0;
 
-    OneMinusecosE = 0; // Suppress the uninitialized warning.
-    while (fabs(ek - ekold) > 1.0E-14) {
+    OneMinusecosE = 1.0 - eph.ecc * cos(ek);
+    for (int iter = 0; iter < 50 && fabs(ek - ekold) > 1.0E-14; iter++) { // Bounded: bad eccentricity may not converge
         ekold = ek;
         OneMinusecosE = 1.0 - eph.ecc * cos(ekold);
         ek = ek + (mk - ekold + eph.ecc * sin(ekold)) / OneMinusecosE;
@@ -2268,8 +2268,8 @@ void *gps_thread_ep(void *arg) {
                 }
             }
 
-            // Update channel allocation
-            allocateChannel(chan, alm, eph[ieph], ionoutc, grx, xyz[0], elvmask);
+            // Update channel allocation from the current position
+            allocateChannel(chan, alm, eph[ieph], ionoutc, grx, xyz[iumd], elvmask);
 
             if (simulator->show_verbose) {
                 gps2date(&grx, &simulator->start);
@@ -2298,6 +2298,7 @@ void *gps_thread_ep(void *arg) {
     gui_status_wprintw(GREEN, "Simulation complete\n");
 
 end_gps_thread:
+    fifo_producer_done();
     free(iq_buff);
     if (xyz)
         free(xyz);
