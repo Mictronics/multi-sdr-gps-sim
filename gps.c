@@ -2489,7 +2489,7 @@ void *gps_thread_ep(void *arg) {
         neph = readRinex2(eph, &ionoutc, nav_file);
     }
 
-    if (neph == 0) {
+    if (neph <= 0) { // 0 = no sets, negative = file could not be read or has wrong format
         gui_status_wprintw(RED, "No ephemeris available.\n");
         goto end_gps_thread;
     }
