@@ -28,6 +28,8 @@
 // Last leap second event, 2016/12/31: used when a RINEX header gives no WN_LSF and DN.
 #define LEAP_DEFAULT_WN 1929
 #define LEAP_DEFAULT_DN 7
+// Offset GPS time to UTC since that event; to be updated when a new leap second is introduced.
+#define LEAP_DEFAULT_DTLS 18
 
 static char rinex_date[21];
 
@@ -991,6 +993,7 @@ static int readRinexHeader(gzFile fp, ionoutc_t *ionoutc, bool rinex3) {
         }
     }
 
+    ionoutc->have = flags;
     ionoutc->vflg = (flags == 0xF); // All iono/UTC lines read
     return 0;
 }
@@ -1197,6 +1200,31 @@ int readRinex(eph_table_t *tab, ionoutc_t *ionoutc, const char *fname, bool rine
 
     free(recs);
     return tab->n;
+}
+
+/* Zero Klobuchar and UTC terms change nothing: the delay equals that without iono data, and UTC
+ * follows from the leap seconds alone. */
+bool ionoDefaults(ionoutc_t *io, gpstime_t g) {
+    if (io->have == 0xF)
+        return false;
+
+    if (!(io->have & 0x1))
+        io->alpha0 = io->alpha1 = io->alpha2 = io->alpha3 = 0.0;
+    if (!(io->have & 0x2))
+        io->beta0 = io->beta1 = io->beta2 = io->beta3 = 0.0;
+    if (!(io->have & 0x4)) {
+        io->A0 = io->A1 = 0.0;
+        io->tot = ((int) g.sec / 4096) * 4096;
+        io->wnt = g.week;
+    }
+    if (!(io->have & 0x8)) {
+        io->dtls = io->dtlsf = LEAP_DEFAULT_DTLS;
+        io->wnlsf = LEAP_DEFAULT_WN;
+        io->dn = LEAP_DEFAULT_DN;
+    }
+    io->have = 0xF;
+    io->vflg = true;
+    return true;
 }
 
 void ephSelect(const eph_table_t *tab, gpstime_t t, ephem_t cur[MAX_SAT]) {
@@ -1825,7 +1853,7 @@ static bool loadEphemeris(gps_ctx_t *c) {
                     io->A0, io->A1, io->tot, io->wnt);
             gui_mvwprintw(LS_FIX, LS_ROW_IONO + 3, LS_COL_INFO, "LEAP SECONDS %d, then %d (week %d, day %d)", io->dtls, io->dtlsf, io->wnlsf, io->dn);
         } else {
-            gui_mvwprintw(LS_FIX, LS_ROW_IONO, LS_COL_INFO, "Ionospheric data invalid or disabled!");
+            gui_mvwprintw(LS_FIX, LS_ROW_IONO, LS_COL_INFO, "Ionospheric data incomplete or disabled!");
         }
     }
     return true;
@@ -1921,6 +1949,9 @@ static bool selectStartTime(gps_ctx_t *c) {
         c->g0 = gmin;
         sim->start = tmin;
     }
+
+    if (ionoDefaults(&c->ionoutc, c->g0))
+        gui_status_wprintw(YELLOW, "Iono/UTC data incomplete in the file, sending neutral values for it.\n");
 
     gui_mvwprintw(LS_FIX, LS_ROW_RINEX, LS_COL_INFO, "RINEX date:      %s", rinex_date);
     gui_mvwprintw(LS_FIX, LS_ROW_START, LS_COL_INFO, "Start time:      %4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)",

@@ -91,6 +91,8 @@ With `-f` the program downloads the ephemeris and almanac over HTTPS, no login n
 
 The files are saved as `rinex2.gz`, `rinex3.gz` and `almanac.sem` in the working directory.
 
+The NOAA RINEX 2 files have no leap second line in their header. Whatever ionosphere, UTC or leap second data a file lacks is replaced by neutral values (no ionosphere correction, UTC following from the leap seconds, currently 18 s), so subframe 4 page 18 is always complete. Data that the file does provide is used as it is, and the same Klobuchar parameters that are transmitted are applied to the simulated delays.
+
 ### Usage
 
 ````

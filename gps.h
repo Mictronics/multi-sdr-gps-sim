@@ -172,6 +172,7 @@ typedef struct {
     double A0, A1;
     int dtls, tot, wnt;
     int dtlsf, wnlsf, dn; /* Leap second offset after the last or next event, its GPS week and day of week (1 = Sunday) */
+    int have; /* Groups read from the file: 1 alpha, 2 beta, 4 UTC parameters, 8 leap seconds */
 } ionoutc_t;
 
 typedef struct {
@@ -222,6 +223,10 @@ int readRinex(eph_table_t *tab, ionoutc_t *ionoutc, const char *fname, bool rine
 
 /* For every satellite pick the record closest in time to t (vflg false if none is near enough). */
 void ephSelect(const eph_table_t *tab, gpstime_t t, ephem_t cur[MAX_SAT]);
+
+/* Fill the ionosphere and UTC groups the file did not provide with neutral values for the start time g,
+ * so subframe 4 page 18 is complete. Returns true if anything was filled. */
+bool ionoDefaults(ionoutc_t *io, gpstime_t g);
 
 void *gps_thread_ep(void *arg);
 

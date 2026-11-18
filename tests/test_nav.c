@@ -4,6 +4,7 @@
  * Run with "make test".
  */
 #include <stdio.h>
+#include <string.h>
 #include "gps-sim.h"
 #include "almanac.h"
 
@@ -61,6 +62,23 @@ int main(void) {
     expect("SF4 p18 WNlsf", field(3 + 17 * 2, 249, 8), 2000 % 256);
     expect("SF4 p18 DN", field(3 + 17 * 2, 257, 8), 3);
     expect("SF4 p18 dtlsf", field(3 + 17 * 2, 271, 8), 19);
+
+    // Neutral values for a file without iono/UTC data: page 18 is complete and says "no correction"
+    ionoutc_t blank;
+    memset(&blank, 0, sizeof (blank));
+    gpstime_t start = {2445, 330237.0};
+    ionoDefaults(&blank, start);
+    eph2sbf(eph, blank, alm, sbf);
+    expect("defaults: page 18 SV id", field(3 + 17 * 2, 63, 6), 56);
+    expect("defaults: alpha0", field(3 + 17 * 2, 69, 8), 0);
+    expect("defaults: beta0", field(3 + 17 * 2, 105, 8), 0);
+    expect("defaults: WNt", field(3 + 17 * 2, 227, 8), 2445 % 256);
+    expect("defaults: tot", field(3 + 17 * 2, 219, 8), 327680 / 4096);
+    expect("defaults: dtls", field(3 + 17 * 2, 241, 8), 18);
+    expect("defaults: WNlsf", field(3 + 17 * 2, 249, 8), 1929 % 256);
+    expect("defaults: DN", field(3 + 17 * 2, 257, 8), 7);
+    expect("defaults: dtlsf", field(3 + 17 * 2, 271, 8), 18);
+
     printf(failures ? "%d FAILURES\n" : "all checks passed\n", failures);
     return failures != 0;
 }

@@ -125,6 +125,7 @@ static void test_sorted_by_satellite(void) {
     expect_int("wnlsf", io.wnlsf, 1929);
     expect_int("dn", io.dn, 7);
     expect_int("iono/UTC valid", io.vflg, 1);
+    expect_int("all four header groups read", io.have, 0xF);
 
     // Three records each for G01 and G02, in time order; E05 is skipped
     expect_int("G01 records", records_of(0), 3);
@@ -398,6 +399,77 @@ static void test_leap_seconds(void) {
     // No GPS line at all: the iono/UTC parameters are not complete
     read_with_leap_line("    14    14  1000     2BDS                                 LEAP SECONDS");
     expect_int("only another system: valid", io.vflg, 0);
+    expect_int("only another system: groups read", io.have, 0x7);
+}
+
+/* Write the given header lines followed by the END OF HEADER line to the temporary file. */
+static const char *write_header(const char *const *hdr, int n) {
+    int fd;
+    FILE *fp;
+
+    if (!temp_made) {
+        fd = mkstemp(temp_path);
+        temp_made = 1;
+    } else {
+        fd = open(temp_path, O_WRONLY | O_TRUNC);
+    }
+    fp = fdopen(fd, "w");
+    for (int i = 0; i < n; i++)
+        fprintf(fp, "%s\n", hdr[i]);
+    fprintf(fp, "%s\n", lines[first_record - 1]);
+    fclose(fp);
+    return temp_path;
+}
+
+/* Files without ionosphere/UTC data get neutral values for what is missing, and only for that. */
+static void test_iono_defaults(void) {
+    const gpstime_t g = {2445, 330237.0};
+    const char *gpsa = NULL;
+    char leap[100];
+
+    for (int i = 0; i < first_record; i++)
+        if (!strncmp(lines[i], "GPSA", 4))
+            gpsa = lines[i];
+    snprintf(leap, sizeof (leap), "%-60s%s", "    19    20  2000     3", "LEAP SECONDS");
+
+    // Only the version line: everything is filled
+    const char *none[] = {lines[0]};
+    read_file(write_header(none, 1), true);
+    expect_int("headerless: groups read", io.have, 0);
+    expect_int("headerless: valid before", io.vflg, 0);
+    expect_int("headerless: filled", ionoDefaults(&io, g), 1);
+    expect_int("headerless: valid after", io.vflg, 1);
+    expect_int("headerless: groups after", io.have, 0xF);
+    expect_near("headerless: alpha0", io.alpha0, 0.0);
+    expect_near("headerless: beta3", io.beta3, 0.0);
+    expect_near("headerless: A0", io.A0, 0.0);
+    expect_near("headerless: A1", io.A1, 0.0);
+    expect_int("headerless: tot is a multiple of 4096 at or before the start", io.tot, 327680);
+    expect_int("headerless: wnt", io.wnt, 2445);
+    expect_int("headerless: dtls", io.dtls, 18);
+    expect_int("headerless: dtlsf", io.dtlsf, 18);
+    expect_int("headerless: wnlsf", io.wnlsf, 1929);
+    expect_int("headerless: dn", io.dn, 7);
+    expect_int("headerless: nothing left to fill", ionoDefaults(&io, g), 0);
+
+    // Alpha and the leap seconds given, the rest missing: the given values stay
+    const char *part[] = {lines[0], gpsa, leap};
+    read_file(write_header(part, 3), true);
+    expect_int("partial: groups read", io.have, 0x9);
+    expect_int("partial: filled", ionoDefaults(&io, g), 1);
+    expect_near("partial: alpha0 kept", io.alpha0, 2.0489e-08);
+    expect_near("partial: beta0 filled", io.beta0, 0.0);
+    expect_int("partial: tot filled", io.tot, 327680);
+    expect_int("partial: dtls kept", io.dtls, 19);
+    expect_int("partial: dtlsf kept", io.dtlsf, 20);
+    expect_int("partial: wnlsf kept", io.wnlsf, 2000);
+    expect_int("partial: dn kept", io.dn, 3);
+
+    // A complete header is left alone
+    read_file(SAMPLE, true);
+    expect_int("complete: nothing filled", ionoDefaults(&io, g), 0);
+    expect_near("complete: A0 kept", io.A0, 1.8626451492e-09);
+    expect_int("complete: tot kept", io.tot, 405504);
 }
 
 int main(void) {
@@ -416,6 +488,7 @@ int main(void) {
     test_duplicate_record();
     test_rejected_files();
     test_leap_seconds();
+    test_iono_defaults();
 
     free(tab.rec);
     if (temp_made)
