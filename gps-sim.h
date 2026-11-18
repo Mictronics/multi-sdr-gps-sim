@@ -83,6 +83,12 @@ typedef struct {
     datetime_t start; // Simulation start time
 } simulator_t;
 
+// CPU cores the threads are pinned to when available: the SDR TX thread is
+// either iqfile or Pluto (HackRF transmits from a libhackrf thread).
+#define CORE_MAIN 1
+#define CORE_GPS 2
+#define CORE_SDR 3
+
 void set_thread_name(const char *name);
 int thread_to_core(int core_id);
 

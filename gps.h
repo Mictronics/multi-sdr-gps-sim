@@ -104,7 +104,7 @@
 #define CODE_FREQ (1.023e6)
 #define CARR_TO_CODE (1.0/1540.0)
 
-#define EPHEM_ARRAY_SIZE (13) // for daily GPS broadcast ephemers file (brdc)
+#define EPHEM_ARRAY_SIZE (13) // for daily GPS broadcast ephemeris file (brdc)
 
 /* GPS parity bit-vectors
  * The last 6 bits of a 30bit GPS word are parity check bits.
@@ -138,7 +138,7 @@ typedef struct {
     double sec; /* second inside the GPS \a week */
 } gpstime_t;
 
-/* Structure repreenting UTC time */
+/* Structure representing UTC time */
 typedef struct {
     int y; /* Calendar year */
     int m; /* Calendar month */
@@ -162,7 +162,7 @@ typedef struct {
     gpstime_t toc; /* Time of Clock */
     gpstime_t toe; /* Time of Ephemeris */
     int iodc; /* Issue of Data, Clock */
-    int iode; /* Isuse of Data, Ephemeris */
+    int iode; /* Issue of Data, Ephemeris */
     double deltan; /* Delta-N (radians/sec) */
     double cuc; /* Cuc (radians) */
     double cus; /* Cus (radians) */
@@ -172,7 +172,7 @@ typedef struct {
     double crs; /* Correction to radius sin (meters) */
     double ecc; /* e Eccentricity */
     double sqrta; /* sqrt(A) (sqrt(m)) */
-    double m0; /* Mean anamoly (radians) */
+    double m0; /* Mean anomaly (radians) */
     double omg0; /* Longitude of the ascending node (radians) */
     double inc0; /* Inclination (radians) */
     double aop;

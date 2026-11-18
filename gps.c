@@ -122,8 +122,8 @@ static int allocatedSat[MAX_SAT];
 
 /* Subtract two vectors of double
  * y Result of subtraction
- * x1 Minuend of subtracion
- * x2 Subtrahend of subtracion
+ * x1 Minuend of subtraction
+ * x2 Subtrahend of subtraction
  */
 static void subVect(double *y, const double *x1, const double *x2) {
     y[0] = x1[0] - x2[0];
@@ -151,7 +151,7 @@ static double dotProd(const double *x1, const double *x2) {
 }
 
 /* Generate the C/A code sequence for a given Satellite Vehicle PRN
- * prn PRN nuber of the Satellite Vehicle
+ * prn PRN number of the Satellite Vehicle
  * ca Caller-allocated integer array of 1023 bytes
  */
 static void codegen(int *ca, int prn) {
@@ -378,7 +378,7 @@ static void ecef2neu(const double *xyz, double t[3][3], double *neu) {
     return;
 }
 
-/* Convert North-Eeast-Up to Azimuth + Elevation
+/* Convert North-East-Up to Azimuth + Elevation
  * neu Input position in North-East-Up format
  * azel Output array of azimuth + elevation as double
  */
@@ -399,7 +399,7 @@ static void neu2azel(double *azel, const double *neu) {
  * eph Ephemeris data of the satellite
  * g GPS time at which position is to be computed
  * pos Computed position (vector)
- * vel Computed velociy (vector)
+ * vel Computed velocity (vector)
  * clk Computed clock
  */
 static void satpos(ephem_t eph, gpstime_t g, double *pos, double *vel, double *clk) {
@@ -775,7 +775,7 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
     toa = (unsigned long) (eph.toe.sec / 4096.0);
 
     for (sv = 0; sv < MAX_SAT; sv++) {
-        if (alm->sv[sv].svid != 0) // Valid almanac is availabe
+        if (alm->sv[sv].svid != 0) // Valid almanac is available
         {
             wna = (unsigned long) (alm->sv[sv].toa.week % 256);
             toa = (unsigned long) (alm->sv[sv].toa.sec / 4096.0);
@@ -866,7 +866,7 @@ static unsigned long computeChecksum(unsigned long source, int nib) {
     if (nib) // Non-information bearing bits for word 2 and 10
     {
         /*
-        Solve bits 23 and 24 to presearve parity check
+        Solve bits 23 and 24 to preserve parity check
         with zeros in bits 29 and 30.
          */
 
@@ -1797,10 +1797,7 @@ void *gps_thread_ep(void *arg) {
 
     CURLcode curl_code = CURLE_GOT_NOTHING;
 
-    /* On a multi-core CPU we run the main thread and reader thread on different cores.
-     * Try sticking the main thread to core 2
-     */
-    thread_to_core(2);
+    thread_to_core(CORE_GPS);
     set_thread_name("gps-thread");
 
     if ((simulator->nav_file_name == NULL) && (simulator->use_ftp == false)) {
@@ -2046,7 +2043,7 @@ void *gps_thread_ep(void *arg) {
     // Create IQ buffer.
     iq_buff = calloc(IQ_BUFFER_SIZE, 2);
 
-    // Aquire first fifo block for transfer buffer
+    // Acquire first fifo block for transfer buffer
     struct iq_buf *iq = fifo_acquire();
     if (iq == NULL) { // FIFO halted
         goto end_gps_thread;
@@ -2194,7 +2191,7 @@ void *gps_thread_ep(void *arg) {
 
         // Fill transfer fifo
         for (isamp = 0; isamp < IQ_BUFFER_SIZE; isamp++) {
-            // validLength starts with 0 on aquire
+            // validLength starts with 0 on acquire
             if (simulator->sample_size == SC16) {
                 iq->data16[iq->validLength] = iq_buff[isamp];
             } else {

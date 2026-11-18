@@ -29,10 +29,7 @@ static void *iqfile_thread_ep(void *arg) {
         pthread_exit(NULL);
     }
 
-    /* On a multi-core CPU we run the main thread and reader thread on different cores.
-     * Try sticking the main thread to core 3
-     */
-    thread_to_core(3);
+    thread_to_core(CORE_SDR);
     set_thread_name("iqfile-thread");
 
     while (!iqfile_thread_exit) {

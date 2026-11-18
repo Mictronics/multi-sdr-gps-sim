@@ -17,6 +17,7 @@
 #include <limits.h>
 #include <math.h>
 #include <curl/curl.h>
+#include <ncurses.h>
 #include <sched.h>
 #include <fcntl.h> 
 #include <unistd.h>
@@ -38,6 +39,17 @@ const char args_doc[] = "";
 const char doc[] = "gps-sim generates a GPS L1 baseband signal IQ data stream, which is then transmitted by a software-defined radio (SDR) platform.";
 static struct argp argp = {options, parse_opt, args_doc, doc, NULL, NULL, NULL};
 
+/* Store a copy of an option argument; a repeated option replaces the earlier one. */
+static void set_string(char **dst, const char *src) {
+    char *copy = strdup(src);
+    if (copy == NULL) {
+        fprintf(stderr, "Out of memory\n");
+        exit(EXIT_FAILURE);
+    }
+    free(*dst);
+    *dst = copy;
+}
+
 /* Parse a whole-string integer option or exit with a usage error. */
 static int parse_int(const char *arg, struct argp_state *state, const char *what) {
     char *end;
@@ -57,31 +69,31 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             if (arg == NULL) {
                 return ARGP_ERR_UNKNOWN;
             }
-            simulator.nav_file_name = strdup(arg);
+            set_string(&simulator.nav_file_name, arg);
             break;
         case 'r':
             if (arg == NULL) {
                 return ARGP_ERR_UNKNOWN;
             }
-            simulator.sdr_name = strdup(arg);
+            set_string(&simulator.sdr_name, arg);
             break;
         case 'U':
             if (arg == NULL) {
                 return ARGP_ERR_UNKNOWN;
             }
-            simulator.pluto_uri = strdup(arg);
+            set_string(&simulator.pluto_uri, arg);
             break;
         case 'N':
             if (arg == NULL) {
                 return ARGP_ERR_UNKNOWN;
             }
-            simulator.pluto_hostname = strdup(arg);
+            set_string(&simulator.pluto_hostname, arg);
             break;
         case 'm':
             if (arg == NULL) {
                 return ARGP_ERR_UNKNOWN;
             }
-            simulator.motion_file_name = strdup(arg);
+            set_string(&simulator.motion_file_name, arg);
             simulator.interactive_mode = false;
             break;
         case 'f':
@@ -281,7 +293,7 @@ static void cleanup_and_exit(int code) {
     exit(code);
 }
 
-/* Set trhead name if supported. */
+/* Set thread name if supported. */
 void set_thread_name(const char *name) {
 #if (__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 12)
     pthread_setname_np(pthread_self(), name);
@@ -322,10 +334,7 @@ int main(int argc, char** argv) {
 
     // Initialize all simulator variables
     simulator_init();
-    /* On a multi-core CPU we run the main thread and reader thread on different cores.
-     * Try sticking the main thread to core 1
-     */
-    thread_to_core(1);
+    thread_to_core(CORE_MAIN);
     set_thread_name("simulator-thread");
 
     // Parse the command line options
@@ -403,16 +412,16 @@ int main(int argc, char** argv) {
                     gui_show_panel(HELP, ON);
                     is_help_shown = true;
                     break;
-                case 9: // TAB
+                case '\t':
                     gui_toggle_current_panel();
                     break;
-                case 265: // F1
+                case KEY_F(1):
                     gui_top_panel(TRACK);
                     break;
-                case 266: // F2
+                case KEY_F(2):
                     gui_top_panel(LS_FIX);
                     break;
-                case 267: // F3
+                case KEY_F(3):
                     gui_top_panel(KF_FIX);
                     break;
                 case LEFT_KEY:
