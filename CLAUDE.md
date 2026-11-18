@@ -15,7 +15,7 @@ The Makefile has no header dependency tracking and does not rebuild when `HACKRF
 
 Run example: `./gps-sim -e brdc1320.21n.gz -l 35.68,139.76,10 -r iqfile` (see README for all options; `help.h` holds the usage text). `-r` selects the SDR backend (`none|iqfile|hackrf|plutosdr`). Nav files may be gzipped RINEX 2 or 3 (`-3`). `-f` downloads the nav file (NOAA CORS for RINEX 2, BKG for RINEX 3) and the Celestrak almanac over HTTPS instead.
 
-The program needs a terminal of at least 120x26 and writes `iqdata.bin` in the working directory with `-r iqfile`. The bundled `brdc1320.21n.gz` is from 2021, so use it with `--disable-almanac` or the bundled (2021) `almanac.sem`; a current almanac is rejected as too far from the scenario time.
+The program needs a terminal of at least 120x26 and writes `iqdata.bin` in the working directory with `-r iqfile`. The local sample `brdc1320.21n.gz` (2021-05-12) matches the local `almanac.sem` (GPS week 2157); a current almanac is rejected as too far from the scenario time, so use `--disable-almanac` with old nav files. Neither file is tracked by git.
 
 ## Architecture
 
@@ -30,4 +30,4 @@ Derived from Takuji Ebinuma's gps-sdr-sim. The program synthesizes GPS L1 C/A ba
 
 Data flow: RINEX/almanac → `gps.c` channel + nav-message state → IQ buffers → FIFO → SDR TX thread. Position comes from `--geo-loc`, a motion file (`-m`, e.g. `circle.csv`), `--target` or TUI input.
 
-The repo root contains build artifacts (`*.o`, `gps-sim`) and sample data (`*.gz` RINEX files, `almanac.sem`, `circle.csv`).
+The working directory also collects untracked build artifacts (`*.o`, `gps-sim`) and data files (`*.gz` RINEX files, `almanac.sem`, `circle.csv`, `iqdata.bin`); downloads with `-f` overwrite `rinex2.gz`, `rinex3.gz` and `almanac.sem`.
