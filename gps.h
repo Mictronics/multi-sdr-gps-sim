@@ -236,6 +236,10 @@ typedef struct {
 
 CURLcode download_file(const char *url, const char *filename, const atomic_bool *cancel);
 
+/* Read the ephemerides of a RINEX 2 or 3 navigation file into sets of one hour (see gps.c).
+ * Returns the number of sets, negative on error. */
+int readRinex(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fname, bool rinex3);
+
 void *gps_thread_ep(void *arg);
 
 #endif /* GPS_H */

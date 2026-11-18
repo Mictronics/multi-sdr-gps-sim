@@ -41,3 +41,4 @@ nbproject/*
 *.d
 .build-flags
 tests/test_nav
+tests/test_rinex

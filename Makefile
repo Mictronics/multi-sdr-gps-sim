@@ -1,6 +1,7 @@
 HACKRFSDR ?= no
 PLUTOSDR ?= no
 OPT ?= -O2
+CPPFLAGS += -I.
 
 DIALECT = -std=c11
 CFLAGS += $(DIALECT) $(OPT) -g -W -Wall -Wextra -D_GNU_SOURCE -MMD -MP
@@ -35,17 +36,19 @@ $(BUILD_FLAGS): FORCE
 gps-sim: fifo.o almanac.o gps.o gui.o sdr.o gps-sim.o $(SDR_OBJ)
 	$(CC) -g -o $@ $^ $(LDFLAGS) $(LIBS) $(LIBS_SDR)
 
-# Unit test of the navigation message; needs no SDR or terminal.
-TEST_BIN = tests/test_nav
-$(TEST_BIN): tests/test_nav.c gps.o almanac.o fifo.o $(BUILD_FLAGS)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -I. -o $@ tests/test_nav.c gps.o almanac.o fifo.o $(LDFLAGS) $(LIBS)
+# Unit tests, they need no SDR or terminal; gui and thread calls are stubbed.
+TEST_BINS = tests/test_nav tests/test_rinex
+TEST_COMMON = tests/stubs.o gps.o almanac.o fifo.o
 
-test: $(TEST_BIN)
-	./$(TEST_BIN)
+tests/test_%: tests/test_%.o $(TEST_COMMON)
+	$(CC) -g -o $@ $^ $(LDFLAGS) $(LIBS)
+
+test: $(TEST_BINS)
+	@for t in $(TEST_BINS); do echo "== $$t"; ./$$t || exit 1; done
 
 clean:
-	rm -f *.o *.d $(BUILD_FLAGS) gps-sim $(TEST_BIN) tests/*.d
+	rm -f *.o *.d tests/*.o tests/*.d $(BUILD_FLAGS) gps-sim $(TEST_BINS)
 
--include $(wildcard *.d)
+-include $(wildcard *.d tests/*.d)
 
 .PHONY: all test clean FORCE

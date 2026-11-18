@@ -1165,7 +1165,7 @@ static int compareEphRec(const void *a, const void *b) {
  * rinex3 true for RINEX 3, false for RINEX 2
  * Number of sets of ephemerides, negative on error
  */
-static int readRinex(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fname, bool rinex3) {
+int readRinex(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fname, bool rinex3) {
     char str[MAX_CHAR];
     struct eph_rec *recs = NULL;
     int nrec = 0, capacity = 0;
@@ -1210,7 +1210,8 @@ static int readRinex(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fna
 
     gzclose(fp);
 
-    qsort(recs, nrec, sizeof (*recs), compareEphRec);
+    if (nrec > 1) // qsort must not get a NULL array from a file without records
+        qsort(recs, nrec, sizeof (*recs), compareEphRec);
 
     int nsets = 0;
     gpstime_t gset = {0, 0.0};

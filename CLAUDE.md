@@ -10,7 +10,7 @@ make test
 make clean
 ```
 
-Flat Makefile, C11, no linter. `make test` builds and runs `tests/test_nav.c`, the only test: it checks the navigation message fields (SV health, almanac health, leap seconds) that `eph2sbf` writes against the IS-GPS-200 bit positions. Deps: libm, pthread, libcurl, libz, ncurses/panel, plus libhackrf and/or libiio + libad9361 when the matching SDR flag is set. Backends are compiled in via `-DENABLE_HACKRFSDR` / `-DENABLE_PLUTOSDR`.
+Flat Makefile, C11, no linter. `make test` runs two unit tests, linked against `gps.c` with the GUI stubbed (`tests/stubs.c`) and run from the repository root: `tests/test_nav.c` checks the navigation message fields (SV health, almanac health, leap seconds) that `eph2sbf` writes against the IS-GPS-200 bit positions, and `tests/test_rinex.c` checks `readRinex` on `tests/data/sample_rinex3.rnx`, a trimmed real IGS merged file sorted by satellite. Deps: libm, pthread, libcurl, libz, ncurses/panel, plus libhackrf and/or libiio + libad9361 when the matching SDR flag is set. Backends are compiled in via `-DENABLE_HACKRFSDR` / `-DENABLE_PLUTOSDR`.
 
 Objects track header dependencies (`-MMD`) and are rebuilt when `HACKRFSDR`, `PLUTOSDR` or `OPT` change (`.build-flags`). The default is `-O2`; use `make OPT=-O0` for debugging.
 
