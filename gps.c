@@ -1706,6 +1706,9 @@ static int readUserMotion(double xyz[USER_MOTION_SIZE][3], const char *filename)
 
 #define SAMPLE_PERIOD (1.0 / (double) TX_SAMPLERATE)
 
+// Satellites with a record near the start time that make -s now keep the ephemeris unshifted
+#define COVER_MIN_SATS 4
+
 // State of the signal generation, shared by the steps of gps_thread_ep.
 typedef struct {
     simulator_t *sim;
@@ -1877,22 +1880,34 @@ static bool selectStartTime(gps_ctx_t *c) {
 
     if (c->g0.week >= 0) { // Scenario start time has been set.
         if (sim->time_overwrite == true) {
-            gtmp.week = c->g0.week;
-            gtmp.sec = (double) (((int) (c->g0.sec)) / 7200)*7200.0;
+            // Shifting moves the satellites away from where the real almanac puts them, so it is
+            // only done for data that does not reach the start time (e.g. an old nav file)
+            ephSelect(&c->table, c->g0, c->eph);
+            int covered = 0;
+            for (int sv = 0; sv < MAX_SAT; sv++)
+                covered += c->eph[sv].vflg ? 1 : 0;
 
-            double dsec = subGpsTime(gtmp, gmin);
+            if (covered >= COVER_MIN_SATS) {
+                gui_status_wprintw(GREEN, "Ephemeris covers the start time, used as it is.\n");
+            } else {
+                gui_status_wprintw(YELLOW, "Ephemeris does not reach the start time, shifting it.\n");
+                gtmp.week = c->g0.week;
+                gtmp.sec = (double) (((int) (c->g0.sec)) / 7200)*7200.0;
 
-            // Overwrite the UTC reference week number
-            c->ionoutc.wnt = gtmp.week;
-            c->ionoutc.tot = (int) gtmp.sec;
+                double dsec = subGpsTime(gtmp, gmin);
 
-            // Overwrite the TOC and TOE to the scenario start time
-            for (int i = 0; i < c->table.n; i++) {
-                ephem_t *e = &c->table.rec[i];
-                e->toc = incGpsTime(e->toc, dsec);
-                gps2date(&e->toc, &ttmp);
-                e->t = ttmp;
-                e->toe = incGpsTime(e->toe, dsec);
+                // Overwrite the UTC reference week number
+                c->ionoutc.wnt = gtmp.week;
+                c->ionoutc.tot = (int) gtmp.sec;
+
+                // Overwrite the TOC and TOE to the scenario start time
+                for (int i = 0; i < c->table.n; i++) {
+                    ephem_t *e = &c->table.rec[i];
+                    e->toc = incGpsTime(e->toc, dsec);
+                    gps2date(&e->toc, &ttmp);
+                    e->t = ttmp;
+                    e->toe = incGpsTime(e->toe, dsec);
+                }
             }
         } else if (subGpsTime(c->g0, gmin) < 0.0 || subGpsTime(gmax, c->g0) < 0.0) {
             gui_status_wprintw(RED, "Invalid start time.\n");
