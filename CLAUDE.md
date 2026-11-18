@@ -6,10 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 make all HACKRFSDR=yes PLUTOSDR=yes   # either flag optional; iqfile backend is always built
+make test
 make clean
 ```
 
-Flat Makefile, C11, no tests or linter. Deps: libm, pthread, libcurl, libz, ncurses/panel, plus libhackrf and/or libiio + libad9361 when the matching SDR flag is set. Backends are compiled in via `-DENABLE_HACKRFSDR` / `-DENABLE_PLUTOSDR`.
+Flat Makefile, C11, no linter. `make test` builds and runs `tests/test_nav.c`, the only test: it checks the navigation message fields (SV health, almanac health, leap seconds) that `eph2sbf` writes against the IS-GPS-200 bit positions. Deps: libm, pthread, libcurl, libz, ncurses/panel, plus libhackrf and/or libiio + libad9361 when the matching SDR flag is set. Backends are compiled in via `-DENABLE_HACKRFSDR` / `-DENABLE_PLUTOSDR`.
 
 Objects track header dependencies (`-MMD`) and are rebuilt when `HACKRFSDR`, `PLUTOSDR` or `OPT` change (`.build-flags`). The default is `-O2`; use `make OPT=-O0` for debugging.
 

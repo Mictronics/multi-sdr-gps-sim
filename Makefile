@@ -35,9 +35,17 @@ $(BUILD_FLAGS): FORCE
 gps-sim: fifo.o almanac.o gps.o gui.o sdr.o gps-sim.o $(SDR_OBJ)
 	$(CC) -g -o $@ $^ $(LDFLAGS) $(LIBS) $(LIBS_SDR)
 
+# Unit test of the navigation message; needs no SDR or terminal.
+TEST_BIN = tests/test_nav
+$(TEST_BIN): tests/test_nav.c gps.o almanac.o fifo.o $(BUILD_FLAGS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -I. -o $@ tests/test_nav.c gps.o almanac.o fifo.o $(LDFLAGS) $(LIBS)
+
+test: $(TEST_BIN)
+	./$(TEST_BIN)
+
 clean:
-	rm -f *.o *.d $(BUILD_FLAGS) gps-sim
+	rm -f *.o *.d $(BUILD_FLAGS) gps-sim $(TEST_BIN) tests/*.d
 
 -include $(wildcard *.d)
 
-.PHONY: all clean FORCE
+.PHONY: all test clean FORCE

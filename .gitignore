@@ -40,3 +40,4 @@ nbproject/*
 # Build
 *.d
 .build-flags
+tests/test_nav
