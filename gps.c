@@ -2727,8 +2727,10 @@ void *gps_thread_ep(void *arg) {
 
         // Signal GPS init done and running
         if (simulator->gps_thread_running == false) {
+            pthread_mutex_lock(&(simulator->gps_lock));
             simulator->gps_thread_running = true;
             pthread_cond_signal(&(simulator->gps_init_done));
+            pthread_mutex_unlock(&(simulator->gps_lock));
         }
 
         if (simulator->interactive_mode) {
@@ -2968,7 +2970,9 @@ end_gps_thread:
     if (xyz)
         free(xyz);
     gui_status_wprintw(RED, "Exit GPS thread\n");
+    pthread_mutex_lock(&(simulator->gps_lock));
     simulator->gps_thread_exit = true;
     pthread_cond_signal(&(simulator->gps_init_done));
+    pthread_mutex_unlock(&(simulator->gps_lock));
     pthread_exit(NULL);
 }

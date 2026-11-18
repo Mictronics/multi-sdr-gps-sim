@@ -136,8 +136,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             }
             d = atof(arg);
             if (d < 0.0 || d > ((double) USER_MOTION_SIZE) / 10.0) {
-                gui_status_wprintw(RED, "Error: Invalid duration.\n");
-                return -1;
+                argp_error(state, "Invalid duration, maximum is %.1f seconds.", ((double) USER_MOTION_SIZE) / 10.0);
             }
             simulator.duration = (int) (d * 10.0 + 0.5);
             break;
@@ -213,10 +212,10 @@ static void simulator_init(void) {
     pthread_mutex_init(&simulator.gps_lock, NULL);
 }
 
+// Only async-signal-safe work here: the GUI takes a mutex and calls ncurses
 static void signal_handler(int sig) {
-    signal(sig, SIG_DFL); // Reset signal handler
+    NOTUSED(sig);
     simulator.main_exit = true;
-    gui_status_wprintw(RED, "Caught signal %s, shutting down\n", strsignal(sig));
 }
 
 static void cleanup_and_exit(int code) {
@@ -274,10 +273,12 @@ int main(int argc, char** argv) {
     bool is_info_shown = false;
     bool is_help_shown = false;
 
-    // signal handlers:
-    signal(SIGINT, signal_handler);
-    signal(SIGTERM, signal_handler);
-    signal(SIGABRT, signal_handler);
+    // signal handlers, reset after the first signal so a second one terminates
+    struct sigaction sa = {.sa_handler = signal_handler, .sa_flags = SA_RESETHAND};
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGABRT, &sa, NULL);
 
     // Initialize all simulator variables
     simulator_init();
@@ -320,8 +321,12 @@ int main(int argc, char** argv) {
             gps_thread_started = true;
         }
 
+        // Wait until the GPS thread is running or has exited
+        int ret = 0;
         pthread_mutex_lock(&(simulator.gps_lock));
-        int ret = pthread_cond_timedwait(&(simulator.gps_init_done), &(simulator.gps_lock), &timeout);
+        while (gps_thread_started && ret != ETIMEDOUT && !simulator.gps_thread_running && !simulator.gps_thread_exit) {
+            ret = pthread_cond_timedwait(&(simulator.gps_init_done), &(simulator.gps_lock), &timeout);
+        }
         pthread_mutex_unlock(&(simulator.gps_lock));
 
         if (ret == ETIMEDOUT) {

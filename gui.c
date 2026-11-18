@@ -362,6 +362,7 @@ void gui_mvwprintw(window_panel_t w, int y, int x, const char * fmt, ...) {
     pthread_mutex_lock(&gui_lock);
     va_list args;
     if (wmove(window[w], y, x) == ERR) {
+        pthread_mutex_unlock(&gui_lock);
         return;
     }
     va_start(args, fmt);
