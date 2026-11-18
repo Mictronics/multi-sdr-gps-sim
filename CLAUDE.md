@@ -11,7 +11,7 @@ make clean
 
 Flat Makefile, C11, no tests or linter. Deps: libm, pthread, libcurl, libz, ncurses/panel, plus libhackrf and/or libiio + libad9361 when the matching SDR flag is set. Backends are compiled in via `-DENABLE_HACKRFSDR` / `-DENABLE_PLUTOSDR`.
 
-The Makefile has no header dependency tracking and does not rebuild when `HACKRFSDR`/`PLUTOSDR` change; run `make clean` when switching flags.
+Objects track header dependencies (`-MMD`) and are rebuilt when `HACKRFSDR`, `PLUTOSDR` or `OPT` change (`.build-flags`). The default is `-O2`; use `make OPT=-O0` for debugging.
 
 Run example: `./gps-sim -e brdc1320.21n.gz -l 35.68,139.76,10 -r iqfile` (see README for all options; `help.h` holds the usage text). `-r` selects the SDR backend (`none|iqfile|hackrf|plutosdr`). Nav files may be gzipped RINEX 2 or 3 (`-3`). `-f` downloads the nav file (NOAA CORS for RINEX 2, BKG for RINEX 3) and the Celestrak almanac over HTTPS instead.
 

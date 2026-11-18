@@ -36,3 +36,7 @@ nbproject/*
 *.sem.txt
 *.yuma
 *.alm
+
+# Build
+*.d
+.build-flags
