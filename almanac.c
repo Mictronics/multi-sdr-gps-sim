@@ -111,6 +111,10 @@ CURLcode almanac_read_file(void) {
          * representation of the GPS week number...
          * Celestrak almanac files use a modulo 256 week number in file name.
          * See https://celestrak.com/GPS/almanac/SEM/2021/
+         *
+         * Current Celestrak files hold the week modulo 1024. Reducing it modulo 256 loses nothing
+         * for that, for 8 bit or for full week numbers; gps.c resolves the full week against the
+         * scenario time.
          */
         a->toa.week = (int) (week % 256); // Full week is resolved against the scenario time
         a->toa.sec = (double) sec;
