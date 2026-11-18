@@ -31,11 +31,6 @@ static const int gui_x_offset = 2;
 
 int sdr_hackrf_init(simulator_t *simulator) {
     int result = HACKRF_SUCCESS;
-    uint8_t board_id = BOARD_ID_INVALID;
-    char version[255 + 1];
-    uint16_t usb_version;
-    read_partid_serialno_t read_partid_serialno;
-    uint8_t operacakes[8];
     double sample_rate_gps_hz;
     uint32_t baseband_filter_bw_hackrf_hz = 0;
     uint64_t freq_gps_hz;
@@ -74,49 +69,6 @@ int sdr_hackrf_init(simulator_t *simulator) {
     if (result != HACKRF_SUCCESS) {
         gui_status_wprintw(RED, "hackrf_open() failed: %s (%d)\n", hackrf_error_name(result), result);
         return -1;
-    }
-
-    result = hackrf_board_id_read(device, &board_id);
-    if (result != HACKRF_SUCCESS) {
-        gui_status_wprintw(RED, "hackrf_board_id_read() failed: %s (%d)\n", hackrf_error_name(result), result);
-        return -1;
-    }
-    gui_mvwprintw(TRACK, y++, gui_x_offset, "Board ID Number: %d (%s)", board_id, hackrf_board_id_name(board_id));
-
-    result = hackrf_version_string_read(device, &version[0], 255);
-    if (result != HACKRF_SUCCESS) {
-        gui_status_wprintw(RED, "hackrf_version_string_read() failed: %s (%d)\n", hackrf_error_name(result), result);
-        return -1;
-    }
-
-    result = hackrf_usb_api_version_read(device, &usb_version);
-    if (result != HACKRF_SUCCESS) {
-        gui_status_wprintw(RED, "hackrf_usb_api_version_read() failed: %s (%d)\n",
-                hackrf_error_name(result), result);
-        return -1;
-    }
-    gui_mvwprintw(TRACK, y++, gui_x_offset, "Firmware Version: %s (API:%x.%02x)", version, (usb_version >> 8)&0xFF, usb_version & 0xFF);
-
-    result = hackrf_board_partid_serialno_read(device, &read_partid_serialno);
-    if (result != HACKRF_SUCCESS) {
-        gui_status_wprintw(RED, "hackrf_board_partid_serialno_read() failed: %s (%d)\n", hackrf_error_name(result), result);
-        return -1;
-    }
-    gui_mvwprintw(TRACK, y++, gui_x_offset, "Part ID Number: 0x%08x 0x%08x",
-            read_partid_serialno.part_id[0],
-            read_partid_serialno.part_id[1]);
-
-    result = hackrf_get_operacake_boards(device, &operacakes[0]);
-    if ((result != HACKRF_SUCCESS) && (result != HACKRF_ERROR_USB_API_VERSION)) {
-        gui_status_wprintw(RED, "hackrf_get_operacake_boards() failed: %s (%d)\n", hackrf_error_name(result), result);
-        return -1;
-    }
-    if (result == HACKRF_SUCCESS) {
-        for (int j = 0; j < 8; j++) {
-            if (operacakes[j] == 0)
-                break;
-            gui_mvwprintw(TRACK, y++, gui_x_offset, "Operacake found, address: 0x%02x", operacakes[j]);
-        }
     }
 
     sample_rate_gps_hz = TX_SAMPLERATE;
