@@ -1110,8 +1110,11 @@ struct eph_rec {
 static int compareEphRec(const void *a, const void *b) {
     const struct eph_rec *ra = (const struct eph_rec *) a;
     const struct eph_rec *rb = (const struct eph_rec *) b;
-    double dt = subGpsTime(ra->eph.toc, rb->eph.toc);
 
+    if (ra->sv != rb->sv)
+        return ra->sv - rb->sv;
+
+    double dt = subGpsTime(ra->eph.toc, rb->eph.toc);
     if (dt != 0.0)
         return dt < 0.0 ? -1 : 1;
 
@@ -1119,27 +1122,23 @@ static int compareEphRec(const void *a, const void *b) {
 }
 
 /* Read ephemeris data from a RINEX 2 or 3 navigation file.
- * Records may come in any order (the IGS merged files are sorted by satellite);
- * they are sorted by clock time and split into sets, a new set starting when a
- * record is more than an hour after the first one of the current set.
- * eph Output SV ephemeris data, one row per set
+ * Records may come in any order (the IGS merged files are sorted by satellite).
+ * A satellite listed twice with the same clock time keeps the later record.
+ * tab Output, all records by satellite and clock time; tab->rec is NULL without records
  * rinex3 true for RINEX 3, false for RINEX 2
- * Number of sets of ephemerides, negative on error
+ * Number of records, negative on error
  */
-int readRinex(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fname, bool rinex3) {
+int readRinex(eph_table_t *tab, ionoutc_t *ionoutc, const char *fname, bool rinex3) {
     char str[MAX_CHAR];
     struct eph_rec *recs = NULL;
     int nrec = 0, capacity = 0;
     int result;
     gzFile fp;
 
+    memset(tab, 0, sizeof (*tab));
+
     if (fname == NULL || NULL == (fp = gzopen(fname, "rt")))
         return (-1);
-
-    // Clear valid flag
-    for (int ieph = 0; ieph < EPHEM_ARRAY_SIZE; ieph++)
-        for (int sv = 0; sv < MAX_SAT; sv++)
-            eph[ieph][sv].vflg = false;
 
     if ((result = readRinexHeader(fp, ionoutc, rinex3)) != 0) {
         gzclose(fp);
@@ -1171,23 +1170,48 @@ int readRinex(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fname, boo
 
     gzclose(fp);
 
-    if (nrec > 1) // qsort must not get a NULL array from a file without records
-        qsort(recs, nrec, sizeof (*recs), compareEphRec);
-
-    int nsets = 0;
-    gpstime_t gset = {0, 0.0};
-    for (int i = 0; i < nrec; i++) {
-        if (nsets == 0 || subGpsTime(recs[i].eph.toc, gset) > SECONDS_IN_HOUR) {
-            if (nsets >= EPHEM_ARRAY_SIZE)
-                break; // Table full
-            gset = recs[i].eph.toc;
-            nsets++;
-        }
-        eph[nsets - 1][recs[i].sv] = recs[i].eph;
+    if (nrec == 0) {
+        free(recs);
+        return 0;
     }
 
+    qsort(recs, nrec, sizeof (*recs), compareEphRec);
+
+    tab->rec = malloc(nrec * sizeof (*tab->rec));
+    if (tab->rec == NULL) {
+        free(recs);
+        return (-1);
+    }
+
+    for (int i = 0; i < nrec; i++) {
+        // Of equal records of one satellite only the last one (sorted last) is kept
+        if (i + 1 < nrec && recs[i + 1].sv == recs[i].sv && subGpsTime(recs[i + 1].eph.toc, recs[i].eph.toc) == 0.0)
+            continue;
+        tab->rec[tab->n++] = recs[i].eph;
+        tab->first[recs[i].sv + 1] = tab->n;
+    }
+    // Satellites without records inherit the end of the previous one
+    for (int sv = 1; sv <= MAX_SAT; sv++)
+        if (tab->first[sv] < tab->first[sv - 1])
+            tab->first[sv] = tab->first[sv - 1];
+
     free(recs);
-    return nsets;
+    return tab->n;
+}
+
+void ephSelect(const eph_table_t *tab, gpstime_t t, ephem_t cur[MAX_SAT]) {
+    for (int sv = 0; sv < MAX_SAT; sv++) {
+        double best = EPH_MAX_AGE;
+
+        cur[sv].vflg = false;
+        for (int i = tab->first[sv]; i < tab->first[sv + 1]; i++) {
+            double age = fabs(subGpsTime(tab->rec[i].toc, t));
+            if (age <= best) { // The later of two equally close records wins
+                best = age;
+                cur[sv] = tab->rec[i];
+            }
+        }
+    }
 }
 
 static double ionosphericDelay(const ionoutc_t *ionoutc, gpstime_t g, double *llh, double *azel) {
@@ -1685,9 +1709,8 @@ static int readUserMotion(double xyz[USER_MOTION_SIZE][3], const char *filename)
 // State of the signal generation, shared by the steps of gps_thread_ep.
 typedef struct {
     simulator_t *sim;
-    ephem_t eph[EPHEM_ARRAY_SIZE][MAX_SAT];
-    int neph; // Number of ephemeris sets
-    int ieph; // Set in use
+    eph_table_t table; // Every ephemeris record of the file
+    ephem_t eph[MAX_SAT]; // Record in use for each satellite: the closest in time
     ionoutc_t ionoutc;
     almanac_gps_t *alm;
     channel_t chan[MAX_CHAN];
@@ -1781,9 +1804,9 @@ static bool loadEphemeris(gps_ctx_t *c) {
     }
 
     c->ionoutc.enable = sim->ionosphere_enable;
-    c->neph = readRinex(c->eph, &c->ionoutc, nav_file, sim->use_rinex3);
+    int nrec = readRinex(&c->table, &c->ionoutc, nav_file, sim->use_rinex3);
 
-    if (c->neph <= 0) { // 0 = no sets, negative = file could not be read or has wrong format
+    if (nrec <= 0) { // 0 = no records, negative = file could not be read or has wrong format
         gui_status_wprintw(RED, "No ephemeris available.\n");
         return false;
     }
@@ -1837,19 +1860,18 @@ static bool selectStartTime(gps_ctx_t *c) {
         date2gps(&sim->start, &c->g0);
     }
 
-    for (int sv = 0; sv < MAX_SAT; sv++) {
-        if (c->eph[0][sv].vflg == true) {
-            gmin = c->eph[0][sv].toc;
-            tmin = c->eph[0][sv].t;
-            break;
+    // Earliest and latest clock time of the file
+    gmin = gmax = c->table.rec[0].toc;
+    tmin = tmax = c->table.rec[0].t;
+    for (int i = 1; i < c->table.n; i++) {
+        const ephem_t *e = &c->table.rec[i];
+        if (subGpsTime(e->toc, gmin) < 0.0) {
+            gmin = e->toc;
+            tmin = e->t;
         }
-    }
-
-    for (int sv = 0; sv < MAX_SAT; sv++) {
-        if (c->eph[c->neph - 1][sv].vflg == true) {
-            gmax = c->eph[c->neph - 1][sv].toc;
-            tmax = c->eph[c->neph - 1][sv].t;
-            break;
+        if (subGpsTime(e->toc, gmax) > 0.0) {
+            gmax = e->toc;
+            tmax = e->t;
         }
     }
 
@@ -1865,16 +1887,12 @@ static bool selectStartTime(gps_ctx_t *c) {
             c->ionoutc.tot = (int) gtmp.sec;
 
             // Overwrite the TOC and TOE to the scenario start time
-            for (int sv = 0; sv < MAX_SAT; sv++) {
-                for (int i = 0; i < c->neph; i++) {
-                    ephem_t *e = &c->eph[i][sv];
-                    if (e->vflg == true) {
-                        e->toc = incGpsTime(e->toc, dsec);
-                        gps2date(&e->toc, &ttmp);
-                        e->t = ttmp;
-                        e->toe = incGpsTime(e->toe, dsec);
-                    }
-                }
+            for (int i = 0; i < c->table.n; i++) {
+                ephem_t *e = &c->table.rec[i];
+                e->toc = incGpsTime(e->toc, dsec);
+                gps2date(&e->toc, &ttmp);
+                e->t = ttmp;
+                e->toe = incGpsTime(e->toe, dsec);
             }
         } else if (subGpsTime(c->g0, gmin) < 0.0 || subGpsTime(gmax, c->g0) < 0.0) {
             gui_status_wprintw(RED, "Invalid start time.\n");
@@ -1897,22 +1915,14 @@ static bool selectStartTime(gps_ctx_t *c) {
     }
     gui_mvwprintw(LS_FIX, LS_ROW_DURATION, LS_COL_INFO, "Duration:        %.1fs", ((double) c->numd) / 10.0);
 
-    // Select the current set of ephemerides
-    c->ieph = -1;
-    for (int i = 0; i < c->neph && c->ieph < 0; i++) {
-        for (int sv = 0; sv < MAX_SAT; sv++) {
-            if (c->eph[i][sv].vflg == true) {
-                double dt = subGpsTime(c->g0, c->eph[i][sv].toc);
-                if (dt >= -SECONDS_IN_HOUR && dt < SECONDS_IN_HOUR) {
-                    c->ieph = i;
-                    break;
-                }
-            }
-        }
-    }
+    // The ephemerides in use at the start
+    ephSelect(&c->table, c->g0, c->eph);
 
-    if (c->ieph == -1) {
-        gui_status_wprintw(RED, "No current set of ephemerides has been found.\n");
+    int usable = 0;
+    for (int sv = 0; sv < MAX_SAT; sv++)
+        usable += c->eph[sv].vflg ? 1 : 0;
+    if (usable == 0) {
+        gui_status_wprintw(RED, "No ephemeris found close to the start time.\n");
         return false;
     }
     return true;
@@ -1976,7 +1986,7 @@ static void initChannels(gps_ctx_t *c) {
         allocatedSat[sv] = -1;
 
     c->grx = incGpsTime(c->g0, 0.0);
-    allocateChannel(c->chan, c->alm, c->eph[c->ieph], c->ionoutc, c->grx, c->xyz[0], 0.0);
+    allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[0], 0.0);
     showChannels(c);
 
     for (int i = 0; i < 37; i++)
@@ -2008,7 +2018,7 @@ static void updateChannels(gps_ctx_t *c, int iumd) {
         if (ch->prn > 0) {
             range_t rho;
 
-            computeRange(&rho, c->eph[c->ieph][ch->prn - 1], &c->ionoutc, c->grx, c->xyz[iumd]);
+            computeRange(&rho, c->eph[ch->prn - 1], &c->ionoutc, c->grx, c->xyz[iumd]);
 
             ch->azel[0] = rho.azel[0];
             ch->azel[1] = rho.azel[1];
@@ -2125,6 +2135,10 @@ static struct iq_buf *queueSamples(const gps_ctx_t *c, struct iq_buf *iq) {
     return iq;
 }
 
+static bool sameEphemeris(const ephem_t *a, const ephem_t *b) {
+    return a->vflg == b->vflg && a->iode == b->iode && a->toc.week == b->toc.week && a->toc.sec == b->toc.sec;
+}
+
 /* Every 30 s: next navigation message frame, newer ephemeris, channel allocation. */
 static void updateNavigation(gps_ctx_t *c, int iumd, const double *llh) {
     simulator_t *sim = c->sim;
@@ -2135,25 +2149,18 @@ static void updateNavigation(gps_ctx_t *c, int iumd, const double *llh) {
         }
     }
 
-    // Switch to the next set of ephemerides once it is due
-    if (c->ieph + 1 < c->neph) {
-        for (int sv = 0; sv < MAX_SAT; sv++) {
-            if (c->eph[c->ieph + 1][sv].vflg == true) {
-                if (subGpsTime(c->eph[c->ieph + 1][sv].toc, c->grx) < SECONDS_IN_HOUR) {
-                    c->ieph++;
-
-                    for (int i = 0; i < MAX_CHAN; i++) {
-                        // Generate new subframes if allocated
-                        if (c->chan[i].prn != 0)
-                            eph2sbf(c->eph[c->ieph][c->chan[i].prn - 1], c->ionoutc, c->alm, c->chan[i].sbf);
-                    }
-                }
-                break;
-            }
-        }
+    // Use the record closest in time for every satellite; allocated ones that got a newer
+    // record also get new subframes, sent from the next frame on
+    ephem_t next[MAX_SAT];
+    ephSelect(&c->table, c->grx, next);
+    for (int i = 0; i < MAX_CHAN; i++) {
+        int sv = c->chan[i].prn - 1;
+        if (sv >= 0 && next[sv].vflg && !sameEphemeris(&next[sv], &c->eph[sv]))
+            eph2sbf(next[sv], c->ionoutc, c->alm, c->chan[i].sbf);
     }
+    memcpy(c->eph, next, sizeof (next));
 
-    allocateChannel(c->chan, c->alm, c->eph[c->ieph], c->ionoutc, c->grx, c->xyz[iumd], 0.0);
+    allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[iumd], 0.0);
 
     if (sim->show_verbose) {
         gps2date(&c->grx, &sim->start);
@@ -2243,6 +2250,7 @@ end_gps_thread:
     if (c != NULL) {
         free(c->iq_buff);
         free(c->xyz);
+        free(c->table.rec);
         free(c);
     }
     gui_status_wprintw(RED, "Exit GPS thread\n");

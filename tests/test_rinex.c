@@ -1,11 +1,11 @@
-/* Tests readRinex on a trimmed IGS merged RINEX 3 file (tests/data/sample_rinex3.rnx).
+/* Tests readRinex and ephSelect on a trimmed IGS merged RINEX 3 file (tests/data/sample_rinex3.rnx).
  * The file is sorted by satellite as the real ones are (G01 at 00:00, 02:00, 04:00,
- * a Galileo E05 record, then G02 at the same epochs), which needs the records to be
- * sorted by time before they are split into ephemeris sets.
+ * a Galileo E05 record, then G02 at the same epochs). The other tests build files from its
+ * records to reproduce layouts that broke the selection of the ephemerides in real files.
  * Run with "make test" from the repository root.
  */
-#include <math.h>
 #include <fcntl.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,35 +14,50 @@
 
 #define SAMPLE "tests/data/sample_rinex3.rnx"
 #define MAX_LINES 200
+#define HOUR 3600.0
+#define DAY_START 172800.0 // 2026-11-17 00:00 as seconds of GPS week 2445
 
-static ephem_t eph[EPHEM_ARRAY_SIZE][MAX_SAT];
+static eph_table_t tab;
+static ephem_t cur[MAX_SAT];
 static ionoutc_t io;
 static int failures;
 
 static void expect_int(const char *what, long got, long want) {
     if (got != want) {
-        printf("FAIL %-40s got %ld want %ld\n", what, got, want);
+        printf("FAIL %-44s got %ld want %ld\n", what, got, want);
         failures++;
     }
 }
 
 static void expect_near(const char *what, double got, double want) {
     if (fabs(got - want) > 1e-12 * fmax(fabs(want), 1e-20)) {
-        printf("FAIL %-40s got %.15g want %.15g\n", what, got, want);
+        printf("FAIL %-44s got %.15g want %.15g\n", what, got, want);
         failures++;
     }
 }
 
-static int read_file(const char *name, ephem_t out[][MAX_SAT], bool rinex3) {
-    memset(out, 0, sizeof (ephem_t) * EPHEM_ARRAY_SIZE * MAX_SAT);
+static int read_file(const char *name, bool rinex3) {
+    free(tab.rec);
     memset(&io, 0, sizeof (io));
-    return readRinex(out, &io, name, rinex3);
+    return readRinex(&tab, &io, name, rinex3);
 }
 
-static int count_valid(int set) {
+static int records_of(int sv) {
+    return tab.first[sv + 1] - tab.first[sv];
+}
+
+static const ephem_t *record(int sv, int k) {
+    return &tab.rec[tab.first[sv] + k];
+}
+
+/* Satellites with a usable record at the time t (seconds of the week); cur holds them. */
+static int select_at(double t) {
     int n = 0;
+    gpstime_t g = {2445, t};
+
+    ephSelect(&tab, g, cur);
     for (int sv = 0; sv < MAX_SAT; sv++)
-        n += eph[set][sv].vflg ? 1 : 0;
+        n += cur[sv].vflg ? 1 : 0;
     return n;
 }
 
@@ -89,9 +104,9 @@ static const char *write_temp(const char *const *body, int nbody) {
 }
 
 static void test_sorted_by_satellite(void) {
-    int n = read_file(SAMPLE, eph, true);
+    int n = read_file(SAMPLE, true);
 
-    expect_int("sets", n, 3);
+    expect_int("records", n, 6);
 
     // Header values: GPS only, the GAL and BDS iono lines are ignored
     expect_near("alpha0", io.alpha0, 2.0489e-08);
@@ -111,21 +126,19 @@ static void test_sorted_by_satellite(void) {
     expect_int("dn", io.dn, 7);
     expect_int("iono/UTC valid", io.vflg, 1);
 
-    // Every set holds both GPS satellites and nothing else (E05 is skipped)
+    // Three records each for G01 and G02, in time order; E05 is skipped
+    expect_int("G01 records", records_of(0), 3);
+    expect_int("G02 records", records_of(1), 3);
+    expect_int("E05 skipped", records_of(4), 0);
+    expect_int("table size", tab.first[MAX_SAT], 6);
     for (int k = 0; k < 3; k++) {
-        char what[48];
-        snprintf(what, sizeof (what), "set %d satellites", k);
-        expect_int(what, count_valid(k), 2);
-        expect_int("G01 valid", eph[k][0].vflg, 1);
-        expect_int("G02 valid", eph[k][1].vflg, 1);
-        expect_int("E05 skipped", eph[k][4].vflg, 0);
-        expect_int("toc week", eph[k][0].toc.week, 2445);
-        expect_near("G01 toc", eph[k][0].toc.sec, 172800.0 + 7200.0 * k);
-        expect_near("G02 toc", eph[k][1].toc.sec, 172800.0 + 7200.0 * k);
+        expect_int("toc week", record(0, k)->toc.week, 2445);
+        expect_near("G01 toc", record(0, k)->toc.sec, DAY_START + 2 * HOUR * k);
+        expect_near("G02 toc", record(1, k)->toc.sec, DAY_START + 2 * HOUR * k);
     }
 
     // G01 at 00:00, field by field
-    const ephem_t *e = &eph[0][0];
+    const ephem_t *e = record(0, 0);
     expect_near("G01 af0", e->af0, 0.000125890597701);
     expect_near("G01 af1", e->af1, -8.07176547823e-12);
     expect_near("G01 af2", e->af2, 0.0);
@@ -154,16 +167,37 @@ static void test_sorted_by_satellite(void) {
     expect_int("G01 iodc", e->iodc, 343);
     expect_near("G01 fit", e->fit, 4.0);
 
-    // The last record of the last satellite lands in the last set
-    expect_near("G02 04:00 sqrta", eph[2][1].sqrta, 5153.68704987);
-    expect_near("G02 04:00 ecc", eph[2][1].ecc, 0.017336265184);
-    expect_near("G02 04:00 toe", eph[2][1].toe.sec, 187200.0);
-    expect_int("G02 04:00 iodc", eph[2][1].iodc, 89);
+    // The last record of the last satellite
+    expect_near("G02 04:00 sqrta", record(1, 2)->sqrta, 5153.68704987);
+    expect_near("G02 04:00 ecc", record(1, 2)->ecc, 0.017336265184);
+    expect_near("G02 04:00 toe", record(1, 2)->toe.sec, 187200.0);
+    expect_int("G02 04:00 iodc", record(1, 2)->iodc, 89);
 }
 
-/* The same records in time order must give the same sets. */
+/* Every satellite gets the record closest in time, as long as it is within EPH_MAX_AGE. */
+static void test_selection(void) {
+    read_file(SAMPLE, true);
+
+    expect_int("00:30 satellites", select_at(DAY_START + 0.5 * HOUR), 2);
+    expect_near("00:30 G01 toc", cur[0].toc.sec, DAY_START);
+    expect_near("00:30 G02 toc", cur[1].toc.sec, DAY_START);
+    expect_int("00:30 E05 not used", cur[4].vflg, 0);
+
+    select_at(DAY_START + 1 * HOUR + 600);
+    expect_near("01:10 closer to 02:00", cur[0].toc.sec, DAY_START + 2 * HOUR);
+
+    select_at(DAY_START + 3 * HOUR);
+    expect_near("03:00 tie: the later record", cur[0].toc.sec, DAY_START + 4 * HOUR);
+
+    expect_int("2 h after the last record", select_at(DAY_START + 6 * HOUR), 2);
+    expect_int("just over 2 h after the last record", select_at(DAY_START + 6 * HOUR + 1), 0);
+    expect_int("2 h before the first record", select_at(DAY_START - 2 * HOUR), 2);
+    expect_int("just over 2 h before the first record", select_at(DAY_START - 2 * HOUR - 1), 0);
+}
+
+/* The same records in time order must give the same table. */
 static void test_order_independent(void) {
-    static ephem_t other[EPHEM_ARRAY_SIZE][MAX_SAT];
+    static ephem_t saved[6];
     const char *body[MAX_LINES];
     int nbody = 0;
     int g01[3], g02[3], ng01 = 0, ng02 = 0;
@@ -181,19 +215,18 @@ static void test_order_independent(void) {
             body[nbody++] = lines[g01[k] + j];
     }
 
-    read_file(SAMPLE, eph, true);
-    int n = read_file(write_temp(body, nbody), other, true);
+    read_file(SAMPLE, true);
+    memcpy(saved, tab.rec, sizeof (saved));
+    int firsts[MAX_SAT + 1];
+    memcpy(firsts, tab.first, sizeof (firsts));
 
-    expect_int("reordered: sets", n, 3);
-    for (int k = 0; k < 3; k++) {
-        for (int sv = 0; sv < MAX_SAT; sv++) {
-            expect_int("reordered: valid", other[k][sv].vflg, eph[k][sv].vflg);
-            if (eph[k][sv].vflg) {
-                expect_near("reordered: toc", other[k][sv].toc.sec, eph[k][sv].toc.sec);
-                expect_near("reordered: sqrta", other[k][sv].sqrta, eph[k][sv].sqrta);
-                expect_near("reordered: af0", other[k][sv].af0, eph[k][sv].af0);
-            }
-        }
+    expect_int("reordered: records", read_file(write_temp(body, nbody), true), 6);
+    for (int sv = 0; sv <= MAX_SAT; sv++)
+        expect_int("reordered: first", tab.first[sv], firsts[sv]);
+    for (int i = 0; i < 6; i++) {
+        expect_near("reordered: toc", tab.rec[i].toc.sec, saved[i].toc.sec);
+        expect_near("reordered: sqrta", tab.rec[i].sqrta, saved[i].sqrta);
+        expect_near("reordered: af0", tab.rec[i].af0, saved[i].af0);
     }
 }
 
@@ -225,11 +258,82 @@ static void test_bad_records(void) {
     for (int j = 1; j < 8; j++) body[nbody++] = lines[g02_02 + j];
     for (int j = 0; j < 3; j++) body[nbody++] = lines[g01_04 + j]; // Truncated
 
-    int n = read_file(write_temp(body, nbody), eph, true);
+    int n = read_file(write_temp(body, nbody), true);
 
-    expect_int("bad records: sets", n, 1);
-    expect_int("bad records: valid satellites", count_valid(0), 1);
-    expect_int("bad records: G02 kept", eph[0][1].vflg, 1);
+    expect_int("bad records: kept", n, 1);
+    expect_int("bad records: G02 kept", records_of(1), 1);
+    expect_int("bad records: others", tab.first[MAX_SAT] - records_of(1), 0);
+}
+
+/* Builds a file of copies of the G01 record at 04:00 with other PRNs and epochs. */
+static char built[64][100];
+static const char *built_body[64 * 8];
+static int nbuilt, nbuilt_body;
+static int template_line;
+
+static void add_record(int prn, int hh, int mm) {
+    snprintf(built[nbuilt], sizeof (built[0]), "G%02d 2026 11 17 %02d %02d 00%s", prn, hh, mm, lines[template_line] + 23);
+    built_body[nbuilt_body++] = built[nbuilt++];
+    for (int j = 1; j < 8; j++)
+        built_body[nbuilt_body++] = lines[template_line + j];
+}
+
+static void start_building(void) {
+    nbuilt = nbuilt_body = 0;
+    for (int i = first_record; i < nlines; i++)
+        if (!strncmp(lines[i], "G01 2026 11 17 04", 17))
+            template_line = i;
+}
+
+/* A lone upload shortly before and after a regular update of every satellite used to start
+ * ephemeris sets that cut the update in two, leaving one satellite where four were usable. */
+static void test_lone_uploads(void) {
+    start_building();
+    add_record(3, 5, 29); // Lone upload
+    add_record(1, 6, 0);
+    add_record(2, 6, 0);
+    add_record(4, 6, 44); // Lone upload more than an hour after the first one
+    add_record(1, 8, 0);
+    add_record(2, 8, 0);
+    read_file(write_temp(built_body, nbuilt_body), true);
+
+    expect_int("lone uploads: records", tab.first[MAX_SAT], 6);
+    expect_int("07:20 satellites", select_at(DAY_START + 7 * HOUR + 1200), 4);
+    expect_near("07:20 G01 uses 08:00", cur[0].toc.sec, DAY_START + 8 * HOUR);
+    expect_near("07:20 G02 uses 08:00", cur[1].toc.sec, DAY_START + 8 * HOUR);
+    expect_near("07:20 G04 uses its 06:44", cur[3].toc.sec, DAY_START + 6 * HOUR + 44 * 60);
+
+    select_at(DAY_START + 6 * HOUR + 1200);
+    expect_near("06:20 G01 uses 06:00", cur[0].toc.sec, DAY_START + 6 * HOUR);
+    expect_near("06:20 G02 uses 06:00", cur[1].toc.sec, DAY_START + 6 * HOUR);
+}
+
+/* A day has more than the 13 sets the old table held. */
+static void test_many_epochs(void) {
+    start_building();
+    for (int hh = 0; hh < 24; hh++)
+        add_record(1, hh, 0);
+    read_file(write_temp(built_body, nbuilt_body), true);
+
+    expect_int("24 hourly records kept", records_of(0), 24);
+    expect_int("17:20 satellites", select_at(DAY_START + 17 * HOUR + 1200), 1);
+    expect_near("17:20 uses 17:00", cur[0].toc.sec, DAY_START + 17 * HOUR);
+    select_at(DAY_START + 23 * HOUR + 1500);
+    expect_near("23:25 uses 23:00", cur[0].toc.sec, DAY_START + 23 * HOUR);
+}
+
+/* The same satellite and clock time twice: the later record wins. */
+static void test_duplicate_record(void) {
+    start_building();
+    add_record(1, 0, 0);
+    add_record(1, 0, 0);
+    // Give the second copy another sqrt(A) (columns 61-79 of the third orbit line)
+    snprintf(built[nbuilt++], sizeof (built[0]), "%.61s%s", built_body[nbuilt_body - 6], " 5.100000000000E+03");
+    built_body[nbuilt_body - 6] = built[nbuilt - 1];
+    read_file(write_temp(built_body, nbuilt_body), true);
+
+    expect_int("duplicate: one record", records_of(0), 1);
+    expect_near("duplicate: the later one", record(0, 0)->sqrta, 5100.0);
 }
 
 static void expect_header_result(const char *what, const char *version_line, bool rinex3, int want) {
@@ -239,7 +343,7 @@ static void expect_header_result(const char *what, const char *version_line, boo
     // Replace the sample's version line, keep the rest of its header
     snprintf(line, sizeof (line), "%-60s%s", version_line, "RINEX VERSION / TYPE");
     lines[0] = line;
-    int n = read_file(write_temp(NULL, 0), eph, rinex3);
+    int n = read_file(write_temp(NULL, 0), rinex3);
     lines[0] = original;
     expect_int(what, n, want);
 }
@@ -250,8 +354,8 @@ static void test_rejected_files(void) {
     expect_header_result("RINEX 3 file read as RINEX 2", "     3.04           N: GNSS NAV DATA    M: MIXED", false, -2);
     expect_header_result("observation file", "     3.04           O: Observation data M: MIXED", true, -3);
     expect_header_result("header without records", "     3.04           N: GNSS NAV DATA    M: MIXED", true, 0);
-    expect_int("missing file", read_file("/nonexistent.rnx", eph, true), -1);
-    expect_int("no file name", read_file(NULL, eph, true), -1);
+    expect_int("missing file", read_file("/nonexistent.rnx", true), -1);
+    expect_int("no file name", read_file(NULL, true), -1);
 }
 
 /* Read the header with its LEAP SECONDS line replaced by "text" (may hold several lines). */
@@ -264,7 +368,7 @@ static void read_with_leap_line(const char *text) {
 
     char *original = lines[leap];
     lines[leap] = (char *) text;
-    read_file(write_temp(NULL, 0), eph, true);
+    read_file(write_temp(NULL, 0), true);
     lines[leap] = original;
 }
 
@@ -304,11 +408,16 @@ int main(void) {
     }
 
     test_sorted_by_satellite();
+    test_selection();
     test_order_independent();
     test_bad_records();
+    test_lone_uploads();
+    test_many_epochs();
+    test_duplicate_record();
     test_rejected_files();
     test_leap_seconds();
 
+    free(tab.rec);
     if (temp_made)
         unlink(temp_path);
     printf(failures ? "%d FAILURES\n" : "all checks passed\n", failures);

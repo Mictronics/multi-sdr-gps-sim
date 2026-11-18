@@ -100,7 +100,6 @@
 #define CODE_FREQ (1.023e6)
 #define CARR_TO_CODE (1.0/1540.0)
 
-#define EPHEM_ARRAY_SIZE (13) // for daily GPS broadcast ephemeris file (brdc)
 
 /*
  * The almanac message for any dummy SVs shall contain alternating ones and zeros
@@ -207,9 +206,22 @@ typedef struct {
 
 CURLcode download_file(const char *url, const char *filename, const atomic_bool *cancel);
 
-/* Read the ephemerides of a RINEX 2 or 3 navigation file into sets of one hour (see gps.c).
- * Returns the number of sets, negative on error. */
-int readRinex(ephem_t eph[][MAX_SAT], ionoutc_t *ionoutc, const char *fname, bool rinex3);
+/* All ephemeris records of a RINEX file, grouped by satellite and sorted by clock time. */
+typedef struct {
+    ephem_t *rec; /* Free with free() */
+    int n; /* Number of records */
+    int first[MAX_SAT + 1]; /* Satellite sv + 1 owns rec[first[sv]] up to, not including, rec[first[sv + 1]] */
+} eph_table_t;
+
+/* Records further than this from the wanted time are not used: half of the 4 hour fit interval */
+#define EPH_MAX_AGE 7200.0
+
+/* Read the ephemerides of a RINEX 2 or 3 navigation file (see gps.c).
+ * Returns the number of records, negative on error. */
+int readRinex(eph_table_t *tab, ionoutc_t *ionoutc, const char *fname, bool rinex3);
+
+/* For every satellite pick the record closest in time to t (vflg false if none is near enough). */
+void ephSelect(const eph_table_t *tab, gpstime_t t, ephem_t cur[MAX_SAT]);
 
 void *gps_thread_ep(void *arg);
 
