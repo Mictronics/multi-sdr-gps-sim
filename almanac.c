@@ -61,7 +61,7 @@ static size_t fwrite_sem(void *buffer, size_t size, size_t nmemb, void *stream) 
         /* open file for writing */
         out->stream = fopen(out->filename, "wb");
         if (!out->stream)
-            return -1; /* failure, can't open file to write */
+            return 0; /* short write makes curl abort the transfer */
     }
     return fwrite(buffer, size, nmemb, out->stream);
 }
@@ -193,10 +193,12 @@ CURLcode almanac_download(void) {
         NULL
     };
 
-    curl_global_init(CURL_GLOBAL_DEFAULT);
     curl = curl_easy_init();
     if (curl) {
         curl_easy_setopt(curl, CURLOPT_URL, ALMANAC_DOWNLOAD_SEM_URL);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 60L);
+        curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, fwrite_sem);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sem);
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
@@ -204,10 +206,12 @@ CURLcode almanac_download(void) {
         curl_easy_cleanup(curl);
     }
 
-    if (sem.stream)
+    if (sem.stream) {
         fclose(sem.stream);
-
-    curl_global_cleanup();
+        if (res != CURLE_OK) {
+            remove(sem.filename); // Don't keep a partial download
+        }
+    }
 
     if (res != CURLE_OK) {
         return res;

@@ -13,7 +13,11 @@
 #ifndef SDR_H
 #define SDR_H
 
+#include <limits.h>
 #include "gps-sim.h"
+
+// Returned by set_gain for SDR types without gain control
+#define SDR_GAIN_UNSUPPORTED INT_MIN
 
 #define TX_FREQUENCY 1575420000
 #define FREQ_ONE_MHZ (1000000ull)

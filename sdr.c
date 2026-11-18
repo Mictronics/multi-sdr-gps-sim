@@ -62,7 +62,7 @@ static int no_run() {
 
 static int no_set_gain(const int gain) {
     NOTUSED(gain);
-    return -100;
+    return SDR_GAIN_UNSUPPORTED;
 }
 
 static sdr_handler *current_handler(void) {

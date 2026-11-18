@@ -13,6 +13,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <errno.h>
+#include <limits.h>
+#include <math.h>
+#include <curl/curl.h>
 #include <sched.h>
 #include <fcntl.h> 
 #include <unistd.h>
@@ -33,6 +37,17 @@ const char *argp_program_version = "v1.0";
 const char args_doc[] = "";
 const char doc[] = "gps-sim generates a GPS L1 baseband signal IQ data stream, which is then transmitted by a software-defined radio (SDR) platform.";
 static struct argp argp = {options, parse_opt, args_doc, doc, NULL, NULL, NULL};
+
+/* Parse a whole-string integer option or exit with a usage error. */
+static int parse_int(const char *arg, struct argp_state *state, const char *what) {
+    char *end;
+    errno = 0;
+    long v = strtol(arg, &end, 10);
+    if (end == arg || *end != '\0' || errno != 0 || v < INT_MIN || v > INT_MAX) {
+        argp_error(state, "Invalid %s '%s'.", what, arg);
+    }
+    return (int) v;
+}
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state) {
     double d = 0.0;
@@ -82,7 +97,11 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             if (arg == NULL) {
                 return ARGP_ERR_UNKNOWN;
             }
-            sscanf(arg, "%lf,%lf,%lf", &simulator.location.lat, &simulator.location.lon, &simulator.location.height);
+            simulator.location.height = 0.0; // Height is optional
+            if (sscanf(arg, "%lf,%lf,%lf", &simulator.location.lat, &simulator.location.lon, &simulator.location.height) < 2 ||
+                    fabs(simulator.location.lat) > 90.0 || fabs(simulator.location.lon) > 180.0) {
+                argp_error(state, "Invalid location '%s', expected latitude,longitude[,height].", arg);
+            }
             break;
         case 's':
             if (arg == NULL) {
@@ -103,7 +122,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
                 simulator.start.mm = gmt->tm_min;
                 simulator.start.sec = (double) gmt->tm_sec;
             } else {
-                sscanf(arg, "%d/%d/%d,%d:%d:%lf", &simulator.start.y, &simulator.start.m, &simulator.start.d, &simulator.start.hh, &simulator.start.mm, &simulator.start.sec);
+                if (sscanf(arg, "%d/%d/%d,%d:%d:%lf", &simulator.start.y, &simulator.start.m, &simulator.start.d, &simulator.start.hh, &simulator.start.mm, &simulator.start.sec) != 6) {
+                    argp_error(state, "Invalid start time '%s', expected YYYY/MM/DD,hh:mm:ss.", arg);
+                }
             }
             if (simulator.start.y <= 1980 ||
                     simulator.start.m < 1 || simulator.start.m > 12 ||
@@ -111,8 +132,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
                     simulator.start.hh < 0 || simulator.start.hh > 23 ||
                     simulator.start.mm < 0 || simulator.start.mm > 59 ||
                     simulator.start.sec < 0.0 || simulator.start.sec >= 60.0) {
-                fprintf(stderr, "ERROR: Invalid date and time.\n");
-                return ARGP_ERR_UNKNOWN;
+                argp_error(state, "Invalid date and time '%s'.", arg);
             }
             break;
         case 'I':
@@ -128,7 +148,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             if (arg == NULL) {
                 return ARGP_ERR_UNKNOWN;
             }
-            simulator.tx_gain = (int) strtoul(arg, NULL, 10);
+            simulator.tx_gain = parse_int(arg, state, "gain");
             break;
         case 'd':
             if (arg == NULL) {
@@ -145,7 +165,10 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
                 return ARGP_ERR_UNKNOWN;
             }
             simulator.target.valid = true;
-            sscanf(arg, "%lf,%lf,%lf", &simulator.target.distance, &simulator.target.bearing, &simulator.target.height);
+            simulator.target.height = 0.0; // Height is optional
+            if (sscanf(arg, "%lf,%lf,%lf", &simulator.target.distance, &simulator.target.bearing, &simulator.target.height) < 2) {
+                argp_error(state, "Invalid target '%s', expected distance,bearing[,height].", arg);
+            }
             simulator.target.bearing *= 1000;
             break;
         case 'i':
@@ -158,7 +181,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             if (arg == NULL) {
                 return ARGP_ERR_UNKNOWN;
             }
-            simulator.ppb = atoi(arg);
+            simulator.ppb = parse_int(arg, state, "ppb");
             break;
         case 700: // --iq16
             simulator.sample_size = SC16;
@@ -218,6 +241,16 @@ static void signal_handler(int sig) {
     simulator.main_exit = true;
 }
 
+static void change_gain(int delta) {
+    int gain = sdr_set_gain(simulator.tx_gain + delta);
+    if (gain == SDR_GAIN_UNSUPPORTED) {
+        gui_status_wprintw(YELLOW, "This SDR has no gain control.\n");
+        return;
+    }
+    simulator.tx_gain = gain;
+    gui_status_wprintw(GREEN, "Gain: %ddB.\r", gain);
+}
+
 static void cleanup_and_exit(int code) {
     simulator.gps_thread_exit = true;
     fifo_halt(); // Unblock the GPS thread if it waits for a free buffer
@@ -229,6 +262,9 @@ static void cleanup_and_exit(int code) {
     pthread_mutex_destroy(&simulator.gps_lock);
 
     /* Free when pointing to string in heap (strdup allocated when given as run option) */
+    if (simulator.use_ftp) {
+        curl_global_cleanup();
+    }
     free(simulator.nav_file_name);
     free(simulator.sdr_name);
     free(simulator.pluto_hostname);
@@ -296,6 +332,9 @@ int main(int argc, char** argv) {
     if (simulator.nav_file_name == NULL && simulator.use_ftp == false) {
         fprintf(stderr, "Error: GPS ephemeris file is not specified\n");
         return (EXIT_FAILURE);
+    }
+    if (simulator.use_ftp) {
+        curl_global_init(CURL_GLOBAL_DEFAULT); // Once, before any thread uses curl
     }
     gui_init();
     // No access to GUI until this point
@@ -404,12 +443,10 @@ int main(int argc, char** argv) {
                     gui_show_speed((float) (simulator.target.velocity * 3.6));
                     break;
                 case GAIN_INC_KEY:
-                    simulator.tx_gain = sdr_set_gain(simulator.tx_gain + 1);
-                    gui_status_wprintw(GREEN, "Gain: %ddB.\r", simulator.tx_gain);
+                    change_gain(1);
                     break;
                 case GAIN_DEC_KEY:
-                    simulator.tx_gain = sdr_set_gain(simulator.tx_gain - 1);
-                    gui_status_wprintw(GREEN, "Gain: %ddB.\r", simulator.tx_gain);
+                    change_gain(-1);
                     break;
                 default:
                     if (is_info_shown) {

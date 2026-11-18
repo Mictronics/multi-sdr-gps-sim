@@ -2253,7 +2253,7 @@ static size_t fwrite_rinex(void *buffer, size_t size, size_t nmemb, void *stream
         /* open file for writing */
         out->stream = fopen(out->filename, "wb");
         if (!out->stream)
-            return -1; /* failure, can't open file to write */
+            return 0; /* short write makes curl abort the transfer */
     }
     return fwrite(buffer, size, nmemb, out->stream);
 }
@@ -2401,9 +2401,11 @@ void *gps_thread_ep(void *arg) {
     // Read ephemeris
     ////////////////////////////////////////////////////////////
     if (simulator->use_ftp) {
-        time_t t = time(NULL);
-        struct tm *tm = gmtime(&t);
-        char* url = malloc(NAME_MAX);
+        // The current hour is still in progress, fetch the previous one
+        time_t t = time(NULL) - (time_t) SECONDS_IN_HOUR;
+        struct tm tm_utc;
+        struct tm *tm = gmtime_r(&t, &tm_utc);
+        char url[NAME_MAX];
         int station_index = 0;
         // Use RINEX v2 by default or v3 on request
         const stations_t *pstation = stations_v2;
@@ -2435,20 +2437,16 @@ void *gps_thread_ep(void *arg) {
 
         gui_status_wprintw(GREEN, "Pulling RINEX v%u from station: %s\n", (simulator->use_rinex3) ? 3 : 2, pstation[station_index].name);
 
-        // We fetch data from previous hour because the actual hour is still in progress
-        tm->tm_hour -= 1;
-        if (tm->tm_hour < 0) {
-            tm->tm_hour = 23;
-        }
-
         // Compose FTP URL
         snprintf(url, NAME_MAX, RINEX_FTP_URL RINEX_FTP_FILE, (simulator->use_rinex3) ? RINEX3_SUBFOLDER : RINEX2_SUBFOLDER,
                 tm->tm_yday + 1, tm->tm_hour, pstation[station_index].id_v2, tm->tm_yday + 1, 'a' + tm->tm_hour, tm->tm_year - 100);
 
-        curl_global_init(CURL_GLOBAL_DEFAULT);
         curl = curl_easy_init();
         if (curl) {
             curl_easy_setopt(curl, CURLOPT_URL, url);
+            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 60L);
+            curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, fwrite_rinex);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &ftp);
             curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_NONE);
@@ -2462,11 +2460,12 @@ void *gps_thread_ep(void *arg) {
             curl_easy_cleanup(curl);
         }
 
-        if (ftp.stream)
+        if (ftp.stream) {
             fclose(ftp.stream);
-
-        free(url);
-        curl_global_cleanup();
+            if (curl_code != CURLE_OK) {
+                remove(ftp.filename); // Don't keep a partial download
+            }
+        }
 
         if (curl_code != CURLE_OK) {
             switch (curl_code) {
