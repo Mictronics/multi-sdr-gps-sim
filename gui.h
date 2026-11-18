@@ -41,7 +41,6 @@ typedef enum {
     SPEED,
     TARGET,
     LOCATION,
-    EPHEMERIS,
     TOP,
     STATUS,
     HELP
@@ -66,7 +65,6 @@ int gui_getch(void);
 void gui_destroy(void);
 void gui_mvwprintw(window_panel_t w, int y, int x, const char * fmt, ...);
 void gui_status_wprintw(status_color_t clr, const char * fmt, ...);
-void gui_colorpair(window_panel_t w, unsigned clr, attr_status_t onoff);
 void gui_top_panel(window_panel_t p);
 void gui_toggle_current_panel(void);
 void gui_show_panel(window_panel_t p, attr_status_t onoff);

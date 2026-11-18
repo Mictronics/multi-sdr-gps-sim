@@ -19,11 +19,8 @@
 #define ALMANAC_DOWNLOAD_SEM_URL "https://celestrak.org/GPS/almanac/SEM/almanac.sem.txt"
 
 typedef struct {
-    unsigned char ura; // User Range Accuracy lookup code, [0-15], see p. 91 IS-GPS-200L, 0 <2.4m, 15 is >6144m
     unsigned char health; // 0=healthy, unhealthy otherwise [], subframe 4 and 5, page 25 six-bit health code
-    unsigned char config_code; // configuration code [], if >=9 Anti-Spoofing is on
     unsigned short svid; // GPS SV id or prn number 1-32 []  
-    unsigned short svn; // Satellite vehicle number []
     unsigned int valid; // Validity of this almanac
     double e; // eccentricity []
     double delta_i; // orbital inclination at reference time [rad]

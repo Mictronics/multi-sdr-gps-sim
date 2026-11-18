@@ -119,18 +119,6 @@ int sdr_hackrf_init(simulator_t *simulator) {
         }
     }
 
-#ifdef HACKRF_ISSUE_609_IS_FIXED
-    uint32_t cpld_crc = 0;
-    result = hackrf_cpld_checksum(device, &cpld_crc);
-    if ((result != HACKRF_SUCCESS) && (result != HACKRF_ERROR_USB_API_VERSION)) {
-        gui_status_wprintw(RED, "hackrf_cpld_checksum() failed: %s (%d)\n", hackrf_error_name(result), result);
-        return -1;
-    }
-    if (result == HACKRF_SUCCESS) {
-        gui_mvwprintw(TRACK, y++, 60, "CPLD checksum: 0x%08x\n", cpld_crc);
-    }
-#endif /* HACKRF_ISSUE_609_IS_FIXED */
-
     sample_rate_gps_hz = TX_SAMPLERATE;
     // Change the freq to correct the crystal clock error.
     freq_gps_hz = sdr_corrected_frequency(simulator->ppb);

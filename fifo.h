@@ -35,9 +35,6 @@ bool fifo_create(unsigned buffer_count, unsigned buffer_size, unsigned sample_si
 // stop every producer and consumer thread before calling.
 void fifo_destroy();
 
-// Block until the FIFO is empty.
-void fifo_wait_next();
-
 // Block until the producer has used up all free buffers once, or the FIFO is halted.
 void fifo_wait_full();
 

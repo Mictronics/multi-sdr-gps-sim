@@ -29,8 +29,8 @@ static const int help_height = 13;
 static int max_x = 0;
 static int max_y = 0;
 
-static WINDOW *window[13] = {NULL};
-static PANEL *panel[13] = {NULL};
+static WINDOW *window[HELP + 1] = {NULL};
+static PANEL *panel[HELP + 1] = {NULL};
 
 static pthread_mutex_t gui_lock; // Mutex to lock access during GUI updates
 
@@ -204,7 +204,6 @@ static void init_windows(void) {
     window[STATUS] = newwin(STATUS_HEIGHT, max_x - 2, max_y - STATUS_HEIGHT - 1, 1);
     window[TRACK] = newwin(max_y, max_x, 0, 0);
     window[LS_FIX] = newwin(max_y, max_x, 0, 0);
-    window[EPHEMERIS] = newwin(max_y, max_x, 0, 0);
     window[KF_FIX] = newwin(max_y, max_x, 0, 0);
     window[HEADING] = subwin(window[KF_FIX], HEAD_HEIGHT, HEAD_WIDTH, HEAD_Y, HEAD_X);
     show_heading(0);
@@ -259,7 +258,6 @@ static void init_windows(void) {
     panel[TRACK] = new_panel(window[TRACK]);
     panel[LS_FIX] = new_panel(window[LS_FIX]);
     panel[KF_FIX] = new_panel(window[KF_FIX]);
-    panel[EPHEMERIS] = new_panel(window[EPHEMERIS]);
     panel[INFO] = new_panel(window[INFO]);
     panel[STATUS] = new_panel(window[STATUS]);
     panel[HELP] = new_panel(window[HELP]);
@@ -270,13 +268,11 @@ static void init_windows(void) {
 
     set_panel_userptr(panel[TRACK], panel[LS_FIX]);
     set_panel_userptr(panel[LS_FIX], panel[KF_FIX]);
-    set_panel_userptr(panel[KF_FIX], panel[EPHEMERIS]);
-    set_panel_userptr(panel[EPHEMERIS], panel[TRACK]);
+    set_panel_userptr(panel[KF_FIX], panel[TRACK]);
 
     //Print title of each window
     show_window(window[TRACK], "GPS Simulator Setup");
     show_window(window[LS_FIX], "GPS Simulation Status");
-    show_window(window[EPHEMERIS], "Test");
     show_window(window[KF_FIX], "Dynamic Position");
 
     ls_show_header();
@@ -345,7 +341,6 @@ void gui_destroy(void) {
     delwin(window[SPEED]);
     delwin(window[TARGET]);
     delwin(window[LOCATION]);
-    delwin(window[EPHEMERIS]);
     delwin(window[STATUS]);
     delwin(window[HELP]);
     endwin();
@@ -380,16 +375,6 @@ void gui_status_wprintw(status_color_t clr, const char * fmt, ...) {
     }
     va_end(args);
     wrefresh(window[STATUS]);
-    pthread_mutex_unlock(&gui_lock);
-}
-
-void gui_colorpair(window_panel_t w, unsigned clr, attr_status_t onoff) {
-    pthread_mutex_lock(&gui_lock);
-    if (onoff == ON) {
-        wattron(window[w], COLOR_PAIR(clr));
-    } else {
-        wattroff(window[w], COLOR_PAIR(clr));
-    }
     pthread_mutex_unlock(&gui_lock);
 }
 

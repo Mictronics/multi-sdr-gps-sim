@@ -26,11 +26,8 @@ almanac_gps_t* almanac_init(void) {
     almanac_prn_t* a = NULL;
     for (int prn = 0; prn < MAX_SAT; prn++) {
         a = &almanac_gps.sv[prn];
-        a->ura = 0;
         a->health = 0;
-        a->config_code = 0;
         a->svid = 0;
-        a->svn = 0;
         a->valid = 0;
         a->toa.sec = 0.0;
         a->toa.week = 0;
@@ -56,6 +53,7 @@ CURLcode almanac_read_file(void) {
     char title[25]; // 24 chars for %24s plus NUL
     char *pbuf;
     unsigned int n, week, sec, id;
+    unsigned short ignored;
     FILE *fp = fopen("almanac.sem", "rt");
     almanac_prn_t* a = NULL;
 
@@ -92,19 +90,15 @@ CURLcode almanac_read_file(void) {
 
         a->svid = (unsigned short) id;
 
-        // SVN is optional, could be a blank line
+        // SVN is optional (could be a blank line) and not used
         pbuf = fgets(buf, sizeof (buf), fp);
         if (pbuf == NULL) goto error;
-        if (buf[0] == '\n' || buf[0] == '\r') {
-            a->svn = 0;
-        } else {
-            if (sscanf(buf, "%hu", &a->svn) != 1) goto error;
-        }
+        if (buf[0] != '\n' && buf[0] != '\r' && sscanf(buf, "%hu", &ignored) != 1) goto error;
 
+        // URA, not used
         pbuf = fgets(buf, sizeof (buf), fp);
         if (pbuf == NULL) goto error;
-        if (sscanf(buf, "%hhu", &a->ura) != 1) goto error;
-        if (a->ura > 15) a->ura = 15;
+        if (sscanf(buf, "%hu", &ignored) != 1) goto error;
 
         pbuf = fgets(buf, sizeof (buf), fp);
         if (pbuf == NULL) goto error;
@@ -123,10 +117,10 @@ CURLcode almanac_read_file(void) {
         if (sscanf(buf, "%hhu", &a->health) != 1) goto error;
         if (a->health > 63) a->health = 63;
 
+        // Configuration code, not used
         pbuf = fgets(buf, sizeof (buf), fp);
         if (pbuf == NULL) goto error;
-        if (sscanf(buf, "%hhu", &a->config_code) != 1) goto error;
-        if (a->config_code > 15) a->config_code = 15;
+        if (sscanf(buf, "%hu", &ignored) != 1) goto error;
 
         /**
          * ublox u-center software provides the full GPS week number whereas Celestrak follows

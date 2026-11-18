@@ -15,7 +15,6 @@
 
 #include "gps-sim.h"
 
-#define TX_VGA1   0
 #define TX_IF_GAIN_MIN 0
 #define TX_IF_GAIN_MAX 47
 #define BASEBAND_FILTER_BW_MIN (1750000)  /* 1.75 MHz min value */

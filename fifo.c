@@ -20,7 +20,6 @@
 
 static pthread_mutex_t fifo_mutex = PTHREAD_MUTEX_INITIALIZER; // mutex protecting the queues
 static pthread_cond_t fifo_notempty_cond = PTHREAD_COND_INITIALIZER; // condition used to signal FIFO-not-empty
-static pthread_cond_t fifo_empty_cond = PTHREAD_COND_INITIALIZER; // condition used to signal FIFO-empty
 static pthread_cond_t fifo_free_cond = PTHREAD_COND_INITIALIZER; // condition used to signal freelist-not-empty
 static pthread_cond_t fifo_full_cond = PTHREAD_COND_INITIALIZER; // condition used to signal FIFO-full
 static struct iq_buf *fifo_head; // head of queued buffers awaiting demodulation
@@ -86,14 +85,6 @@ void fifo_destroy() {
     fifo_head = fifo_tail = NULL;
 }
 
-void fifo_wait_next() {
-    pthread_mutex_lock(&fifo_mutex);
-    while (fifo_head && !fifo_halted) {
-        pthread_cond_wait(&fifo_empty_cond, &fifo_mutex);
-    }
-    pthread_mutex_unlock(&fifo_mutex);
-}
-
 void fifo_wait_full() {
     pthread_mutex_lock(&fifo_mutex);
     while (!fifo_full && !fifo_halted) {
@@ -126,7 +117,6 @@ void fifo_halt() {
 
     // wake all waiters
     pthread_cond_broadcast(&fifo_notempty_cond);
-    pthread_cond_broadcast(&fifo_empty_cond);
     pthread_cond_broadcast(&fifo_free_cond);
     pthread_cond_broadcast(&fifo_full_cond);
     pthread_mutex_unlock(&fifo_mutex);
@@ -194,7 +184,6 @@ struct iq_buf *fifo_dequeue(void) {
         result->next = NULL;
         if (!fifo_head) {
             fifo_tail = NULL;
-            pthread_cond_broadcast(&fifo_empty_cond);
         }
     }
 

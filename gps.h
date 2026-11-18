@@ -51,7 +51,6 @@
 #define N_DWRD ((N_SBF+1)*N_DWRD_SBF) // Subframe word buffer size
 
 #define N_SBF_PAGE (3+2*25) // Subframes 1 to 3 and 25 pages of subframes 4 and 5
-#define MAX_PAGE (25)
 
 /* C/A code sequence length */
 #define CA_SEQ_LEN (1023)
@@ -105,26 +104,6 @@
 #define CARR_TO_CODE (1.0/1540.0)
 
 #define EPHEM_ARRAY_SIZE (13) // for daily GPS broadcast ephemeris file (brdc)
-
-/* GPS parity bit-vectors
- * The last 6 bits of a 30bit GPS word are parity check bits.
- * Each parity bit is computed from the XOR of a selection of bits from the
- * 1st 24 bits of the current GPS word, and the last 2 bits of the _previous_
- * GPS word.
- * These parity bit-vectors are used to select which message bits will be used
- * for computing each of the 6 parity check bits.
- * We assume the two bits from the previous message (b29, b30) and the 24 bits
- * from the current message, are packed into a 32bit word in this order:
- * < b29, b30, b1, b2, b3, ... b23, b24, X, X, X, X, X, X > (X = don't care)
- * Example: if PBn = 0x40000080,
- * The parity check bit "n" would be computed from the expression (b30 XOR b23).
- */
-#define PB1 0xbb1f3480
-#define PB2 0x5d8f9a40
-#define PB3 0xaec7cd00
-#define PB4 0x5763e680
-#define PB5 0x6bb1f340
-#define PB6 0x8b7a89c0
 
 /*
  * The almanac message for any dummy SVs shall contain alternating ones and zeros
@@ -196,7 +175,6 @@ typedef struct {
     double beta0, beta1, beta2, beta3;
     double A0, A1;
     int dtls, tot, wnt;
-    int dtlsf, dn, wnlsf;
 } ionoutc_t;
 
 typedef struct {
