@@ -16,9 +16,6 @@
 #include <stdatomic.h>
 #include <curl/curl.h>
 
-/* For RKT simulation. Higher computational load, but smoother carrier phase.*/
-#define FLOAT_CARR_PHASE
-
 /* Real-time signal generation */
 #define REAL_TIME_GPS
 
@@ -192,12 +189,7 @@ typedef struct {
     int ca[CA_SEQ_LEN]; /* C/A Sequence */
     double f_carr; /* Carrier frequency */
     double f_code; /* Code frequency */
-#ifdef FLOAT_CARR_PHASE
-    double carr_phase;
-#else
-    unsigned int carr_phase; /* Carrier phase */
-    int carr_phasestep; /* Carrier phasestep */
-#endif
+    double carr_phase; /* Carrier phase, 0.0 - 1.0 */
     double code_phase; /* Code phase */
     gpstime_t g0; /* GPS time at start */
 	unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF]; /*!< current subframe */

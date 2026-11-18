@@ -62,41 +62,6 @@ const int sinTable512[] = {
     -47, -44, -41, -38, -35, -32, -29, -26, -23, -20, -17, -14, -11, -8, -5, -2
 };
 
-const int cosTable512[] = {
-    250, 250, 250, 250, 250, 249, 249, 249, 249, 248, 248, 248, 247, 247, 246, 245,
-    245, 244, 244, 243, 242, 241, 241, 240, 239, 238, 237, 236, 235, 234, 233, 232,
-    230, 229, 228, 227, 225, 224, 223, 221, 220, 218, 217, 215, 214, 212, 210, 209,
-    207, 205, 204, 202, 200, 198, 196, 194, 192, 190, 188, 186, 184, 182, 180, 178,
-    176, 173, 171, 169, 167, 164, 162, 160, 157, 155, 153, 150, 148, 145, 143, 140,
-    138, 135, 132, 130, 127, 125, 122, 119, 116, 114, 111, 108, 105, 103, 100, 97,
-    94, 91, 89, 86, 83, 80, 77, 74, 71, 68, 65, 62, 59, 56, 53, 50,
-    47, 44, 41, 38, 35, 32, 29, 26, 23, 20, 17, 14, 11, 8, 5, 2,
-    -2, -5, -8, -11, -14, -17, -20, -23, -26, -29, -32, -35, -38, -41, -44, -47,
-    -50, -53, -56, -59, -62, -65, -68, -71, -74, -77, -80, -83, -86, -89, -91, -94,
-    -97, -100, -103, -105, -108, -111, -114, -116, -119, -122, -125, -127, -130, -132, -135, -138,
-    -140, -143, -145, -148, -150, -153, -155, -157, -160, -162, -164, -167, -169, -171, -173, -176,
-    -178, -180, -182, -184, -186, -188, -190, -192, -194, -196, -198, -200, -202, -204, -205, -207,
-    -209, -210, -212, -214, -215, -217, -218, -220, -221, -223, -224, -225, -227, -228, -229, -230,
-    -232, -233, -234, -235, -236, -237, -238, -239, -240, -241, -241, -242, -243, -244, -244, -245,
-    -245, -246, -247, -247, -248, -248, -248, -249, -249, -249, -249, -250, -250, -250, -250, -250,
-    -250, -250, -250, -250, -250, -249, -249, -249, -249, -248, -248, -248, -247, -247, -246, -245,
-    -245, -244, -244, -243, -242, -241, -241, -240, -239, -238, -237, -236, -235, -234, -233, -232,
-    -230, -229, -228, -227, -225, -224, -223, -221, -220, -218, -217, -215, -214, -212, -210, -209,
-    -207, -205, -204, -202, -200, -198, -196, -194, -192, -190, -188, -186, -184, -182, -180, -178,
-    -176, -173, -171, -169, -167, -164, -162, -160, -157, -155, -153, -150, -148, -145, -143, -140,
-    -138, -135, -132, -130, -127, -125, -122, -119, -116, -114, -111, -108, -105, -103, -100, -97,
-    -94, -91, -89, -86, -83, -80, -77, -74, -71, -68, -65, -62, -59, -56, -53, -50,
-    -47, -44, -41, -38, -35, -32, -29, -26, -23, -20, -17, -14, -11, -8, -5, -2,
-    2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44, 47,
-    50, 53, 56, 59, 62, 65, 68, 71, 74, 77, 80, 83, 86, 89, 91, 94,
-    97, 100, 103, 105, 108, 111, 114, 116, 119, 122, 125, 127, 130, 132, 135, 138,
-    140, 143, 145, 148, 150, 153, 155, 157, 160, 162, 164, 167, 169, 171, 173, 176,
-    178, 180, 182, 184, 186, 188, 190, 192, 194, 196, 198, 200, 202, 204, 205, 207,
-    209, 210, 212, 214, 215, 217, 218, 220, 221, 223, 224, 225, 227, 228, 229, 230,
-    232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 241, 242, 243, 244, 244, 245,
-    245, 246, 247, 247, 248, 248, 248, 249, 249, 249, 249, 250, 250, 250, 250, 250
-};
-
 // Receiver antenna attenuation in dB for boresight angle = 0:5:180 [deg]
 const double ant_pat_db[37] = {
     0.00, 0.00, 0.22, 0.44, 0.67, 1.11, 1.56, 2.00, 2.44, 2.89, 3.56, 4.22,
@@ -641,34 +606,18 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
     sbf[2][8] = (omegadot & 0xFFFFFFUL) << 6;
     sbf[2][9] = ((iode & 0xFFUL) << 22) | ((idot & 0x3FFFUL) << 8);
 
-    // Empty all the pages of subframes 4 and 5
+    // Empty all the pages of subframes 4 and 5: dummy SV 0 with alternating bits
     for (i = 0; i < 25; i++) {
-        svId = 0UL; // Dummy SV
-        //svId = sbf4_svId[i];
+        for (int sf = 4; sf <= 5; sf++) {
+            unsigned long *page = sbf[sf - 1 + i * 2];
 
-        sbf[3 + i * 2][0] = 0x8B0000UL << 6; // Preamble for TLM
-        sbf[3 + i * 2][1] = 0x4UL << 8; // Subframe ID for HOW
-        sbf[3 + i * 2][2] = (dataId << 28) | (svId << 22) | ((EMPTY_WORD & 0xFFFFUL) << 6);
-        sbf[3 + i * 2][3] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
-        sbf[3 + i * 2][4] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
-        sbf[3 + i * 2][5] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
-        sbf[3 + i * 2][6] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
-        sbf[3 + i * 2][7] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
-        sbf[3 + i * 2][8] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
-        sbf[3 + i * 2][9] = (EMPTY_WORD & 0x3FFFFFUL) << 8;
-
-        //svId = sbf5_svId[i];
-
-        sbf[4 + i * 2][0] = 0x8B0000UL << 6; // Preamble for TLM
-        sbf[4 + i * 2][1] = 0x5UL << 8; // Subframe ID for HOW
-        sbf[4 + i * 2][2] = (dataId << 28) | (svId << 22) | ((EMPTY_WORD & 0xFFFFUL) << 6);
-        sbf[4 + i * 2][3] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
-        sbf[4 + i * 2][4] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
-        sbf[4 + i * 2][5] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
-        sbf[4 + i * 2][6] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
-        sbf[4 + i * 2][7] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
-        sbf[4 + i * 2][8] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
-        sbf[4 + i * 2][9] = (EMPTY_WORD & 0x3FFFFFUL) << 8;
+            page[0] = 0x8B0000UL << 6; // Preamble for TLM
+            page[1] = (unsigned long) sf << 8; // Subframe ID for HOW
+            page[2] = (dataId << 28) | ((EMPTY_WORD & 0xFFFFUL) << 6);
+            for (int w = 3; w < 9; w++)
+                page[w] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
+            page[9] = (EMPTY_WORD & 0x3FFFFFUL) << 8;
+        }
     }
 
     // Subframe 4, pages 2-5 and 7-10: almanac data for PRN 25 through 32
@@ -1546,12 +1495,7 @@ static int allocateChannel(channel_t *chan, almanac_gps_t *alm, ephem_t *eph, io
                         r_ref = rho.range;
 
                         phase_ini = (2.0 * r_ref - r_xyz) / LAMBDA_L1;
-#ifdef FLOAT_CARR_PHASE
                         chan[i].carr_phase = phase_ini - floor(phase_ini);
-#else
-                        phase_ini -= floor(phase_ini);
-                        chan[i].carr_phase = (unsigned int) (512.0 * 65536.0 * phase_ini);
-#endif
                         // Done.
                         break;
                     }
@@ -2058,9 +2002,6 @@ static void updateChannels(gps_ctx_t *c, int iumd) {
             ch->azel[1] = rho.azel[1];
 
             computeCodePhase(ch, rho, 0.1);
-#ifndef FLOAT_CARR_PHASE
-            ch->carr_phasestep = (int) round(512.0 * 65536.0 * ch->f_carr * SAMPLE_PERIOD);
-#endif
             double path_loss = 20200000.0 / rho.d;
 
             // Receiver antenna gain by boresight angle
@@ -2088,15 +2029,9 @@ static void generateSamples(gps_ctx_t *c) {
 
         for (int i = 0; i < MAX_CHAN; i++) {
             if (chan[i].prn > 0) {
-                int iTable;
-#ifdef FLOAT_CARR_PHASE
-                // carr_phase 0.0 - 1.0
-                iTable = (int) floor(chan[i].carr_phase * 512.0);
-#else
-                iTable = (chan[i].carr_phase >> 16) & 511; // 9-bit index
-#endif
-                // dataBit and codeCA are -1 or 1
-                int ip = chan[i].dataBit * chan[i].codeCA * cosTable512[iTable] * gain[i];
+                int iTable = (int) floor(chan[i].carr_phase * 512.0);
+                // dataBit and codeCA are -1 or 1; cosine is the sine 90 degrees (128 steps) ahead
+                int ip = chan[i].dataBit * chan[i].codeCA * sinTable512[(iTable + 128) & 511] * gain[i];
                 int qp = chan[i].dataBit * chan[i].codeCA * sinTable512[iTable] * gain[i];
 
                 // Accumulate for all visible satellites
@@ -2129,16 +2064,12 @@ static void generateSamples(gps_ctx_t *c) {
                 chan[i].codeCA = chan[i].ca[(int) chan[i].code_phase]*2 - 1;
 
                 // Update carrier phase
-#ifdef FLOAT_CARR_PHASE
                 chan[i].carr_phase += chan[i].f_carr * delt;
 
                 if (chan[i].carr_phase >= 1.0)
                     chan[i].carr_phase -= 1.0;
                 else if (chan[i].carr_phase < 0.0)
                     chan[i].carr_phase += 1.0;
-#else
-                chan[i].carr_phase += chan[i].carr_phasestep;
-#endif
             }
         }
 
