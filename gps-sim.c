@@ -84,12 +84,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             simulator.motion_file_name = strdup(arg);
             simulator.interactive_mode = false;
             break;
-        case 701: // --station
-            if (arg == NULL) {
-                return ARGP_ERR_UNKNOWN;
-            }
-            simulator.station_id = strndup(arg, 9);
-            break;
         case 'f':
             simulator.use_ftp = true;
             break;
@@ -228,7 +222,6 @@ static void simulator_init(void) {
     simulator.pluto_hostname = NULL;
     simulator.motion_file_name = NULL;
     simulator.pluto_uri = NULL;
-    simulator.station_id = NULL;
     simulator.sdr_type = SDR_NONE;
     simulator.sample_size = SC08;
     pthread_cond_init(&simulator.gps_init_done, NULL);
@@ -270,7 +263,6 @@ static void cleanup_and_exit(int code) {
     free(simulator.pluto_hostname);
     free(simulator.pluto_uri);
     free(simulator.motion_file_name);
-    free(simulator.station_id);
     sdr_close();
     gui_destroy();
     fflush(stdout);

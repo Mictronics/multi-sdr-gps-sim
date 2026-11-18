@@ -18,11 +18,6 @@
 
 static almanac_gps_t almanac_gps;
 
-struct sem_file {
-    const char *filename;
-    FILE *stream;
-};
-
 /**
  * Initialize empty almanac.
  */
@@ -50,20 +45,6 @@ almanac_gps_t* almanac_init(void) {
         a->af1 = 0.0;
     }
     return &almanac_gps;
-}
-
-/**
- * Curl file writer callback.
- */
-static size_t fwrite_sem(void *buffer, size_t size, size_t nmemb, void *stream) {
-    struct sem_file *out = (struct sem_file *) stream;
-    if (out && !out->stream) {
-        /* open file for writing */
-        out->stream = fopen(out->filename, "wb");
-        if (!out->stream)
-            return 0; /* short write makes curl abort the transfer */
-    }
-    return fwrite(buffer, size, nmemb, out->stream);
 }
 
 /**
@@ -155,10 +136,8 @@ CURLcode almanac_read_file(void) {
          * Celestrak almanac files use a modulo 256 week number in file name.
          * See https://celestrak.com/GPS/almanac/SEM/2021/
          */
-        a->toa.week = (int) week % 256;
+        a->toa.week = (int) (week % 256); // Full week is resolved against the scenario time
         a->toa.sec = (double) sec;
-        // GPS week rollover
-        a->toa.week += 2048;
         a->valid = 1;
         almanac_gps.valid = 1; // We have at least one valid record
     }
@@ -185,34 +164,8 @@ error:
  * sem format expected.
  *  
  */
-CURLcode almanac_download(void) {
-    CURL *curl;
-    CURLcode res = CURLE_GOT_NOTHING;
-    struct sem_file sem = {
-        "almanac.sem",
-        NULL
-    };
-
-    curl = curl_easy_init();
-    if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, ALMANAC_DOWNLOAD_SEM_URL);
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 60L);
-        curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, fwrite_sem);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sem);
-        curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
-        res = curl_easy_perform(curl);
-        curl_easy_cleanup(curl);
-    }
-
-    if (sem.stream) {
-        fclose(sem.stream);
-        if (res != CURLE_OK) {
-            remove(sem.filename); // Don't keep a partial download
-        }
-    }
-
+CURLcode almanac_download(const atomic_bool *cancel) {
+    CURLcode res = download_file(ALMANAC_DOWNLOAD_SEM_URL, "almanac.sem", cancel);
     if (res != CURLE_OK) {
         return res;
     }

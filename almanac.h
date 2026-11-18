@@ -16,7 +16,7 @@
 #include <curl/curl.h>
 #include "gps.h"
 
-#define ALMANAC_DOWNLOAD_SEM_URL "https://www.celestrak.com/GPS/almanac/SEM/almanac.sem.txt"
+#define ALMANAC_DOWNLOAD_SEM_URL "https://celestrak.org/GPS/almanac/SEM/almanac.sem.txt"
 
 typedef struct {
     unsigned char ura; // User Range Accuracy lookup code, [0-15], see p. 91 IS-GPS-200L, 0 <2.4m, 15 is >6144m
@@ -44,7 +44,7 @@ typedef struct {
 
 almanac_gps_t* almanac_init(void);
 CURLcode almanac_read_file(void);
-CURLcode almanac_download(void);
+CURLcode almanac_download(const atomic_bool *cancel);
 
 #endif /* ALMANAC_H */
 

@@ -81,6 +81,16 @@ With ADLAM-PLUTO support: `make all PLUTOSDR=yes` (depends on libiio and libad93
 
 Full SDR support: `make all HACKRFSDR=yes PLUTOSDR=yes`
 
+### Online data sources
+
+With `-f` the program downloads the ephemeris and almanac over HTTPS, no login needed:
+
+- RINEX 2 (default): daily GPS broadcast file from the NOAA CORS public bucket (`noaa-cors-pds`), updated about hourly.
+- RINEX 3 (`-3`): IGS daily merged broadcast file from BKG (`igs.bkg.bund.de`), published the morning after the day ends.
+- Almanac: current SEM almanac from Celestrak (`celestrak.org`).
+
+The files are saved as `rinex2.gz`, `rinex3.gz` and `almanac.sem` in the working directory.
+
 ### Usage
 
 ````
@@ -102,7 +112,7 @@ Options:
 --verbose           -v  Show verbose output and details about simulated channels
 --interactive       -i  Use interactive mode
 --amplifier         -a  Enable TX amplifier (default OFF)
---use-ftp           -f  Pull actual RINEX navigation file from FTP server
+--use-ftp           -f  Pull actual RINEX navigation file and almanac from online sources
 --rinex3            -3  Use RINEX v3 navigation data format
 --disable-almanac       Disable transmission of almanac information
 --help              -?  Give this help list

@@ -13,6 +13,9 @@
 #ifndef GPS_H
 #define GPS_H
 
+#include <stdatomic.h>
+#include <curl/curl.h>
+
 /* For RKT simulation. Higher computational load, but smoother carrier phase.*/
 #define FLOAT_CARR_PHASE
 
@@ -21,10 +24,6 @@
 
 #define RINEX2_FILE_NAME "rinex2.gz"
 #define RINEX3_FILE_NAME "rinex3.gz"
-#define RINEX_FTP_URL "ftp://igs.bkg.bund.de/IGS/"
-#define RINEX2_SUBFOLDER "nrt"
-#define RINEX3_SUBFOLDER "nrt_v3"
-#define RINEX_FTP_FILE "%s/%03i/%02i/%4s%03i%c.%02in.gz"
 
 /* Maximum length of a line in a text file (RINEX, motion) */
 #define MAX_CHAR (100)
@@ -235,12 +234,7 @@ typedef struct {
     range_t rho0;
 } channel_t;
 
-/* Structure represending a single GPS monitoring station. */
-typedef struct {
-    const char *id_v2;
-    const char *id_v3;
-    const char *name;
-} stations_t;
+CURLcode download_file(const char *url, const char *filename, const atomic_bool *cancel);
 
 void *gps_thread_ep(void *arg);
 

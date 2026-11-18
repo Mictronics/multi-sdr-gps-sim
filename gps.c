@@ -25,122 +25,7 @@
 #include "almanac.h"
 #include "gps-sim.h"
 
-/**
- * Note:
- * Not all stations provide RINEX data with ionosphere data.
- */
-
-/**
- * Stations providing Rinex v3 format.
- * 4-characters station ID
- * 9-characters station ID
- * Station name
- * Including Ionosphere data in Rinex file
- */
-const stations_t stations_v3[] = {
-    {"func", "FUNC00PRT", "Funchal"},
-    {"flrs", "FLRS00PRT", "Santa Cruz das Flore"},
-    {"pdel", "PDEL00PRT", "PONTA DELGADA"},
-    {NULL, NULL, NULL} // Always last entry
-};
-
-/**
- * Stations providing Rinex v2 format.
- * 4-characters station ID
- * 9-characters station ID
- * Station name
- */
-const stations_t stations_v2[] = {
-    {"abmf", "ABMF00GLP", "Aeroport du Raizet"},
-    {"aggo", "AGGO00ARG", "AGGO"},
-    {"ajac", "AJAC00FRA", "Ajaccio"},
-    {"ankr", "ANKR00TUR", "Ankara"},
-    {"areg", "AREG00PER", "Arequipa"},
-    {"ascg", "ASCG00SHN", "Ascension"},
-    {"bogi", "BOGI00POL", "Borowa Gora"},
-    {"bor1", "BOR100POL", "Borowiec"},
-    {"brst", "BRST00FRA", "Brest"},
-    {"chpg", "CHPG00BRA", "Cachoeira Paulista"},
-    {"cibg", "CIBG00IDN", "Cibinong"},
-    {"cpvg", "CPVG00CPV", "CAP-VERT"},
-    {"djig", "DJIG00DJI", "Djibouti"},
-    {"dlf1", "DLF100NLD", "Delft"},
-    {"ffmj", "FFMJ00DEU", "Frankfurt/Main"},
-    {"ftna", "FTNA00WLF", "Futuna"},
-    {"gamb", "GAMB00PYF", "Rikitea"},
-    {"gamg", "GAMG00KOR", "Geochang"},
-    {"glps", "GLPS00ECU", "Galapagos Permanent Station"},
-    {"glsv", "GLSV00UKR", "Kiev/Golosiiv"},
-    {"gmsd", "GMSD00JPN", "GUTS Masda"},
-    {"gop6", "GOP600CZE", "Pecny, Ondrejov"},
-    {"gop7", "GOP700CZE", "Pecny, Ondrejov"},
-    {"gope", "GOPE00CZE", "Pecny, Ondrejov"},
-    {"grac", "GRAC00FRA", "Grasse"},
-    {"gras", "GRAS00FRA", "Observatoire de Calern - OCA"},
-    {"holb", "HOLB00CAN", "Holberg"},
-    {"hueg", "HUEG00DEU", "Huegelheim"},
-    {"ieng", "IENG00ITA", "Torino"},
-    {"ista", "ISTA00TUR", "Istanbul"},
-    {"izmi", "IZMI00TUR", "Izmir"},
-    {"jfng", "JFNG00CHN", "Juifeng"},
-    {"joz2", "JOZ200POL", "Jozefoslaw"},
-    {"joze", "JOZE00POL", "Jozefoslaw"},
-    {"kerg", "KERG00ATF", "Kerguelen Islands"},
-    {"kitg", "KITG00UZB", "Kitab"},
-    {"koug", "KOUG00GUF", "Kourou"},
-    {"krgg", "KRGG00ATF", "Kerguelen Islands"},
-    {"krs1", "KRS100TUR", "Kars"},
-    {"lama", "LAMA00POL", "Lamkowo"},
-    {"leij", "LEIJ00DEU", "Leipzig"},
-    {"lmmf", "LMMF00MTQ", "Aeroport Aime CESAIRE-LE LAMENTIN"},
-    {"lroc", "LROC00FRA", "La Rochelle"},
-    {"mad2", "MAD200ESP", "Madrid Deep Space Tracking Station"},
-    {"madr", "MADR00ESP", "Madrid Deep Space Tracking Station"},
-    {"mayg", "MAYG00MYT", "Dzaoudzi"},
-    {"mers", "MERS00TUR", "Mersin"},
-    {"mikl", "MIKL00UKR", "Mykolaiv"},
-    {"morp", "MORP00GBR", "Morpeth"},
-    {"nklg", "NKLG00GAB", "N'KOLTANG"},
-    {"nyal", "NYAL00NOR", "Ny-Alesund"},
-    {"nya1", "NYA100NOR", "Ny-Alesund"},
-    {"ohi2", "OHI200ATA", "O'Higgins"},
-    {"orid", "ORID00MKD", "Ohrid"},
-    {"owmg", "OWMG00NZL", "Chatham Island"},
-    {"polv", "POLV00UKR", "Poltava"},
-    {"ptbb", "PTBB00DEU", "Braunschweig"},
-    {"ptgg", "PTGG00PHL", "Manilla"},
-    {"rabt", "RABT00MAR", "Rabat, EMI"},
-    {"reun", "REUN00REU", "La Reunion - Observatoire Volcanologique"},
-    {"rgdg", "RGDG00ARG", "Rio Grande"},
-    {"riga", "RIGA00LVA", "RIGA permanent GPS"},
-    {"seyg", "SEYG00SYC", "Mahe"},
-    {"sofi", "SOFI00BGR", "Sofia"},
-    {"stj3", "STJ300CAN", "STJ3 CACS-GSD"},
-    {"sulp", "SULP00UKR", "Lviv Polytechnic"},
-    {"svtl", "SVTL00RUS", "Svetloe"},
-    {"tana", "TANA00ETH", "ILA, Bahir Dar University"},
-    {"thtg", "THTG00PYF", "Papeete Tahiti"},
-    {"thti", "THTI00PYF", "Tahiti"},
-    {"tit2", "TIT200DEU", "Titz / Jackerath"},
-    {"tlse", "TLSE00FRA", "Toulouse"},
-    {"tro1", "TRO100NOR", "Tromsoe"},
-    {"warn", "WARN00DEU", "Warnemuende"},
-    {"whit", "WHIT00CAN", "WHIT CACS-GSD"},
-    {"wroc", "WROC00POL", "Wroclaw"},
-    {"wtza", "WTZA00DEU", "Wettzell"},
-    {"yel2", "YEL200CAN", "Yellow Knife"},
-    {"zeck", "ZECK00RUS", "Zelenchukskaya"},
-    {"zim2", "ZIM200CHE", "Zimmerwald"},
-    {"zimm", "ZIMM00CHE", "Zimmerwald L+T 88"},
-    {NULL, NULL, NULL} // Always last entry
-};
-
 static char rinex_date[21];
-
-struct ftp_file {
-    const char *filename;
-    FILE *stream;
-};
 
 const int sinTable512[] = {
     2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44, 47,
@@ -306,6 +191,18 @@ static void codegen(int *ca, int prn) {
         ca[i] = (1 - g1[i] * g2[j % CA_SEQ_LEN]) / 2;
 
     return;
+}
+
+/* Expand a GPS week known modulo 256 to the full week closest to ref_week */
+static int resolveWeek(int week256, int ref_week) {
+    int week = ref_week - ref_week % 256 + week256;
+
+    if (week - ref_week > 128)
+        week -= 256;
+    else if (ref_week - week > 128)
+        week += 256;
+
+    return week;
 }
 
 /* Convert a UTC date into a GPS date
@@ -2149,15 +2046,107 @@ static int allocateChannel(channel_t *chan, almanac_gps_t *alm, ephem_t *eph, io
     return (nsat);
 }
 
-static size_t fwrite_rinex(void *buffer, size_t size, size_t nmemb, void *stream) {
-    struct ftp_file *out = (struct ftp_file *) stream;
-    if (out && !out->stream) {
-        /* open file for writing */
-        out->stream = fopen(out->filename, "wb");
-        if (!out->stream)
-            return 0; /* short write makes curl abort the transfer */
+struct download_target {
+    const char *filename;
+    FILE *stream;
+};
+
+static size_t write_download(void *buffer, size_t size, size_t nmemb, void *userdata) {
+    struct download_target *out = (struct download_target *) userdata;
+    if (!out->stream && !(out->stream = fopen(out->filename, "wb"))) {
+        return 0; // Short write makes curl abort the transfer
     }
     return fwrite(buffer, size, nmemb, out->stream);
+}
+
+static int download_progress(void *userdata, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) {
+    NOTUSED(dltotal);
+    NOTUSED(dlnow);
+    NOTUSED(ultotal);
+    NOTUSED(ulnow);
+    return *(const atomic_bool *) userdata ? 1 : 0; // Non-zero aborts the transfer
+}
+
+/* Download url into filename. A failed transfer leaves no partial file.
+ * The transfer is aborted when *cancel becomes true. */
+CURLcode download_file(const char *url, const char *filename, const atomic_bool *cancel) {
+    struct download_target out = {filename, NULL};
+    CURLcode res = CURLE_FAILED_INIT;
+    CURL *curl = curl_easy_init();
+
+    if (curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 60L);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1000L); // Give up on stalled transfers
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 15L);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, download_progress);
+        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, cancel);
+        curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_download);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &out);
+        res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+    }
+
+    if (out.stream) {
+        fclose(out.stream);
+        if (res != CURLE_OK) {
+            remove(filename);
+        }
+    }
+    return res;
+}
+
+static bool is_connect_error(CURLcode res) {
+    return res == CURLE_COULDNT_CONNECT || res == CURLE_COULDNT_RESOLVE_HOST || res == CURLE_OPERATION_TIMEDOUT;
+}
+
+/* Download the newest available broadcast ephemeris file, trying each source in turn.
+ * RINEX 2: NOAA CORS daily GPS file, refreshed about hourly, so today's file is tried first.
+ * RINEX 3: IGS daily merged file from BKG, published the morning after the day ends.
+ */
+static CURLcode download_nav_file(bool rinex3, const char *filename, const atomic_bool *cancel) {
+    static const char *const rinex3_names[] = {"BRDC00IGS_R", "BRDC00WRD_R"};
+    CURLcode res = CURLE_FAILED_INIT;
+    char url[256];
+    time_t now = time(NULL);
+
+    for (int back = rinex3 ? 1 : 0; back <= (rinex3 ? 3 : 2); back++) {
+        time_t t = now - back * 86400;
+        struct tm tm;
+        gmtime_r(&t, &tm);
+        int year = tm.tm_year + 1900;
+        int doy = tm.tm_yday + 1;
+
+        for (int n = 0; n < (rinex3 ? 2 : 1); n++) {
+            if (rinex3) {
+                snprintf(url, sizeof (url), "https://igs.bkg.bund.de/root_ftp/IGS/BRDC/%04d/%03d/%s_%04d%03d0000_01D_MN.rnx.gz",
+                        year, doy, rinex3_names[n], year, doy);
+            } else {
+                snprintf(url, sizeof (url), "https://noaa-cors-pds.s3.amazonaws.com/rinex/%04d/%03d/brdc%03d0.%02dn.gz",
+                        year, doy, doy, year % 100);
+            }
+            // Retry connection errors: a round-robin DNS name can hand out an unreachable server
+            for (int attempt = 0; attempt < 3; attempt++) {
+                res = download_file(url, filename, cancel);
+                if (res == CURLE_OK) {
+                    gui_status_wprintw(GREEN, "Downloaded %s\n", url);
+                    return res;
+                }
+                if (res == CURLE_ABORTED_BY_CALLBACK || !is_connect_error(res)) {
+                    break;
+                }
+            }
+            if (res == CURLE_ABORTED_BY_CALLBACK || is_connect_error(res)) {
+                return res; // Cancelled, or the host is down so the other candidates would fail too
+            }
+        }
+    }
+    return res;
 }
 
 /* Read the list of user motions from the input file
@@ -2279,12 +2268,7 @@ void *gps_thread_ep(void *arg) {
 
     gui_show_location(&simulator->location);
 
-    CURL *curl;
     CURLcode curl_code = CURLE_GOT_NOTHING;
-    struct ftp_file ftp = {
-        RINEX2_FILE_NAME,
-        NULL
-    };
 
     /* On a multi-core CPU we run the main thread and reader thread on different cores.
      * Try sticking the main thread to core 2
@@ -2300,88 +2284,18 @@ void *gps_thread_ep(void *arg) {
     ////////////////////////////////////////////////////////////
     // Read ephemeris
     ////////////////////////////////////////////////////////////
+    // The online download takes precedence over -e
+    const char *nav_file = simulator->nav_file_name;
     if (simulator->use_ftp) {
-        // The current hour is still in progress, fetch the previous one
-        time_t t = time(NULL) - (time_t) SECONDS_IN_HOUR;
-        struct tm tm_utc;
-        struct tm *tm = gmtime_r(&t, &tm_utc);
-        char url[NAME_MAX];
-        int station_index = 0;
-        // Use RINEX v2 by default or v3 on request
-        const stations_t *pstation = stations_v2;
-        if (simulator->use_rinex3) {
-            pstation = stations_v3;
-        }
-
-        // Get number of stations available, find index for given one
-        for (int s = 0; pstation[s].id_v2 != NULL; s++) {
-            // Station id given, get index
-            if (simulator->station_id != NULL) {
-                if (strncmp(pstation[s].id_v2, simulator->station_id, 4) == 0 || strncmp(pstation[s].id_v3, simulator->station_id, 9) == 0) {
-                    break;
-                }
-            }
-            station_index += 1;
-        }
-
-        // Pick a random station if none given
-        if (simulator->station_id == NULL) {
-            srand((unsigned int) g0.sec);
-            station_index = rand() % station_index;
-        }
-        // Check that we have a picked a valid station
-        // Take the first one when invalid
-        if (pstation[station_index].id_v2 == NULL) {
-            station_index = 0;
-        }
-
-        gui_status_wprintw(GREEN, "Pulling RINEX v%u from station: %s\n", (simulator->use_rinex3) ? 3 : 2, pstation[station_index].name);
-
-        // Compose FTP URL
-        snprintf(url, NAME_MAX, RINEX_FTP_URL RINEX_FTP_FILE, (simulator->use_rinex3) ? RINEX3_SUBFOLDER : RINEX2_SUBFOLDER,
-                tm->tm_yday + 1, tm->tm_hour, pstation[station_index].id_v2, tm->tm_yday + 1, 'a' + tm->tm_hour, tm->tm_year - 100);
-
-        curl = curl_easy_init();
-        if (curl) {
-            curl_easy_setopt(curl, CURLOPT_URL, url);
-            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
-            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 60L);
-            curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, fwrite_rinex);
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &ftp);
-            curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_NONE);
-            if (0 /*simulator->show_verbose*/) {
-                curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-            } else {
-                curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
-            }
-            curl_easy_setopt(curl, CURLOPT_USERPWD, "anonymous:anonymous");
-            curl_code = curl_easy_perform(curl);
-            curl_easy_cleanup(curl);
-        }
-
-        if (ftp.stream) {
-            fclose(ftp.stream);
-            if (curl_code != CURLE_OK) {
-                remove(ftp.filename); // Don't keep a partial download
-            }
-        }
-
+        nav_file = simulator->use_rinex3 ? RINEX3_FILE_NAME : RINEX2_FILE_NAME;
+        gui_status_wprintw(GREEN, "Downloading RINEX v%u ephemeris.\n", simulator->use_rinex3 ? 3 : 2);
+        curl_code = download_nav_file(simulator->use_rinex3, nav_file, &simulator->main_exit);
         if (curl_code != CURLE_OK) {
-            switch (curl_code) {
-                case CURLE_REMOTE_FILE_NOT_FOUND:
-                    gui_status_wprintw(RED, "Curl error: Ephemeris file not found!\n");
-                    break;
-                default:
-                    gui_status_wprintw(RED, "Curl error: %d\n", curl_code);
-                    break;
-            }
+            gui_status_wprintw(RED, "Ephemeris download failed: %s\n", curl_easy_strerror(curl_code));
             goto end_gps_thread;
         }
     }
 
-    // The FTP download is stored as RINEX2_FILE_NAME and takes precedence over -e
-    const char *nav_file = simulator->use_ftp ? RINEX2_FILE_NAME : simulator->nav_file_name;
     if (simulator->use_rinex3) {
         neph = readRinex3(eph, &ionoutc, nav_file);
     } else {
@@ -2530,7 +2444,7 @@ void *gps_thread_ep(void *arg) {
     almanac_gps_t *alm = almanac_init();
     if (simulator->almanac_enable) {
         if (simulator->use_ftp) {
-            curl_code = almanac_download();
+            curl_code = almanac_download(&simulator->main_exit);
         } else {
             curl_code = almanac_read_file();
         }
@@ -2557,6 +2471,7 @@ void *gps_thread_ep(void *arg) {
         for (sv = 0; sv < MAX_SAT; sv++) {
             if (alm->sv[sv].valid != 0) // Valid almanac
             {
+                alm->sv[sv].toa.week = resolveWeek(alm->sv[sv].toa.week, g0.week);
                 gtmp = alm->sv[sv].toa;
                 dt = subGpsTime(alm->sv[sv].toa, g0);
                 if (dt < (-4.0 * SECONDS_IN_WEEK) || dt > (4.0 * SECONDS_IN_WEEK)) {
