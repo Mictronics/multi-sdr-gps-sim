@@ -1707,352 +1707,552 @@ static int readUserMotion(double xyz[USER_MOTION_SIZE][3], const char *filename)
     return (numd);
 }
 
-/*
- * 
- */
-void *gps_thread_ep(void *arg) {
-    simulator_t *simulator = (simulator_t *) (arg);
+// Layout of the LS_FIX window: the channel table starts at the left, the
+// scenario information sits in the column on the right.
+#define LS_COL_INFO 40
+#define LS_ROW_NAV 3
+#define LS_ROW_CHAN 4
+#define LS_ROW_XYZ 5
+#define LS_ROW_LLH 6
+#define LS_ROW_DURATION 7
+#define LS_ROW_RINEX 8
+#define LS_ROW_ALMANAC 9
+#define LS_ROW_START 10
+#define LS_ROW_SIMTIME 11
+#define LS_COL_SIMTIME 57
+#define LS_ROW_ELAPSED 12
+#define LS_ROW_IONO 14
 
+#define SAMPLE_PERIOD (1.0 / (double) TX_SAMPLERATE)
+
+// State of the signal generation, shared by the steps of gps_thread_ep.
+typedef struct {
+    simulator_t *sim;
     ephem_t eph[EPHEM_ARRAY_SIZE][MAX_SAT];
-    channel_t chan[MAX_CHAN];
-
-    datetime_t ttmp;
-    datetime_t tmin, tmax;
-    gpstime_t gmin, gmax;
-    gpstime_t grx;
-    gpstime_t g0;
-    gpstime_t gtmp;
-    g0.week = -1; // Invalid start time
-    if (simulator->start.m >= 1) { // Zero month means no -s given
-        date2gps(&simulator->start, &g0);
-    }
-
-    double elvmask = 0.0; // in degree
-    const double delt = 1.0 / (double) TX_SAMPLERATE;
-    double llh[3];
-    double gain[MAX_CHAN];
-    double path_loss;
-    double ant_gain;
-    double ant_pat[37];
-    double dt;
-
+    int neph; // Number of ephemeris sets
+    int ieph; // Set in use
     ionoutc_t ionoutc;
-    ionoutc.enable = simulator->ionosphere_enable;
+    almanac_gps_t *alm;
+    channel_t chan[MAX_CHAN];
+    double gain[MAX_CHAN];
+    double ant_pat[37]; // Receiver antenna gain per 5 degree of boresight angle
+    double (*xyz)[3]; // User position every 0.1 s
+    int numd; // Number of positions
+    double tmat[3][3]; // ECEF to local north-east-up at the start position
+    gpstime_t g0; // Scenario start
+    gpstime_t grx; // Receiver time
+    short *iq_buff; // 0.1 s of 16 bit IQ samples
+} gps_ctx_t;
 
-    int start_y = 4; // Row to start output in LS_FIX window/panel
-    int ibs; // boresight angle index    
-    int igrx;
-    int sv;
-    int neph, ieph;
-    int i;
-    int ip, qp;
-    int iTable;
-    int isamp;
-    short *iq_buff = NULL;
+/* List the allocated channels in the LS_FIX window. */
+static void showChannels(const gps_ctx_t *c) {
+    int row = LS_ROW_CHAN;
 
-    // Allocate user motion array
-    double (*xyz)[3] = malloc(sizeof (double[USER_MOTION_SIZE][3]));
-    if (xyz == NULL) {
-        gui_status_wprintw(RED, "Failed to allocate user motion memory.\n");
-        goto end_gps_thread;
+    for (int i = 0; i < MAX_CHAN; i++) {
+        if (c->chan[i].prn > 0) {
+            gui_mvwprintw(LS_FIX, row++, 1, "%02d %6.1f %5.1f %11.1f %5.1f", c->chan[i].prn,
+                    c->chan[i].azel[0] * R2D, c->chan[i].azel[1] * R2D, c->chan[i].rho0.d, c->chan[i].rho0.iono_delay);
+        }
     }
+    gui_mvwprintw(LS_FIX, LS_ROW_NAV, LS_COL_INFO, "Nav: %02d satellites", row - LS_ROW_CHAN);
+}
 
-    // Initialize user motion array
-    // with current location/position
-    int iumd = 0;
-    int numd = simulator->duration;
-    double tmat[3][3];
+/* Set the start position, or the target given with -t, as the user motion. */
+static bool initUserPosition(gps_ctx_t *c) {
+    simulator_t *sim = c->sim;
+    double llh[3];
     double neu[3];
 
-    // Set user location
-    llh[0] = simulator->location.lat / R2D;
-    llh[1] = simulator->location.lon / R2D;
-    llh[2] = simulator->location.height;
-    llh2xyz(llh, xyz[0]);
-    ltcmat(llh, tmat);
+    c->xyz = malloc(sizeof (double[USER_MOTION_SIZE][3]));
+    if (c->xyz == NULL) {
+        gui_status_wprintw(RED, "Failed to allocate user motion memory.\n");
+        return false;
+    }
 
-    if (!simulator->target.valid) {
+    c->numd = sim->duration;
+
+    llh[0] = sim->location.lat / R2D;
+    llh[1] = sim->location.lon / R2D;
+    llh[2] = sim->location.height;
+    llh2xyz(llh, c->xyz[0]);
+    ltcmat(llh, c->tmat);
+
+    if (!sim->target.valid) {
         // No target position given, use location
-        simulator->target.lat = simulator->location.lat;
-        simulator->target.lon = simulator->location.lon;
-        simulator->target.height = simulator->location.height;
+        sim->target.lat = sim->location.lat;
+        sim->target.lon = sim->location.lon;
+        sim->target.height = sim->location.height;
     } else {
-        // Set target position as simulation start
-        // Given as distance and bearing from user location in -t option
-        neu[0] = simulator->target.distance * cos((simulator->target.bearing / 1000) / R2D);
-        neu[1] = simulator->target.distance * sin((simulator->target.bearing / 1000) / R2D);
-        neu[2] = simulator->target.height;
-        xyz[0][0] += tmat[0][0] * neu[0] + tmat[1][0] * neu[1] + tmat[2][0] * neu[2];
-        xyz[0][1] += tmat[0][1] * neu[0] + tmat[1][1] * neu[1] + tmat[2][1] * neu[2];
-        xyz[0][2] += tmat[0][2] * neu[0] + tmat[1][2] * neu[1] + tmat[2][2] * neu[2];
+        // Target given as distance and bearing from the user location
+        neu[0] = sim->target.distance * cos((sim->target.bearing / 1000) / R2D);
+        neu[1] = sim->target.distance * sin((sim->target.bearing / 1000) / R2D);
+        neu[2] = sim->target.height;
+        c->xyz[0][0] += c->tmat[0][0] * neu[0] + c->tmat[1][0] * neu[1] + c->tmat[2][0] * neu[2];
+        c->xyz[0][1] += c->tmat[0][1] * neu[0] + c->tmat[1][1] * neu[1] + c->tmat[2][1] * neu[2];
+        c->xyz[0][2] += c->tmat[0][2] * neu[0] + c->tmat[1][2] * neu[1] + c->tmat[2][2] * neu[2];
     }
 
-    for (iumd = 1; iumd < numd; iumd++) {
-        xyz[iumd][0] = xyz[0][0];
-        xyz[iumd][1] = xyz[0][1];
-        xyz[iumd][2] = xyz[0][2];
+    for (int i = 1; i < c->numd; i++) {
+        c->xyz[i][0] = c->xyz[0][0];
+        c->xyz[i][1] = c->xyz[0][1];
+        c->xyz[i][2] = c->xyz[0][2];
     }
 
-    gui_show_location(&simulator->location);
+    gui_show_location(&sim->location);
+    return true;
+}
 
-    CURLcode curl_code = CURLE_GOT_NOTHING;
+/* Download (-f) or read the ephemeris. */
+static bool loadEphemeris(gps_ctx_t *c) {
+    simulator_t *sim = c->sim;
 
-    thread_to_core(CORE_GPS);
-    set_thread_name("gps-thread");
-
-    if ((simulator->nav_file_name == NULL) && (simulator->use_ftp == false)) {
+    if ((sim->nav_file_name == NULL) && (sim->use_ftp == false)) {
         gui_status_wprintw(RED, "GPS ephemeris file is not specified.\n");
-        goto end_gps_thread;
+        return false;
     }
 
-    ////////////////////////////////////////////////////////////
-    // Read ephemeris
-    ////////////////////////////////////////////////////////////
     // The online download takes precedence over -e
-    const char *nav_file = simulator->nav_file_name;
-    if (simulator->use_ftp) {
-        nav_file = simulator->use_rinex3 ? RINEX3_FILE_NAME : RINEX2_FILE_NAME;
-        gui_status_wprintw(GREEN, "Downloading RINEX v%u ephemeris.\n", simulator->use_rinex3 ? 3 : 2);
-        curl_code = download_nav_file(simulator->use_rinex3, nav_file, &simulator->main_exit);
-        if (curl_code != CURLE_OK) {
-            gui_status_wprintw(RED, "Ephemeris download failed: %s\n", curl_easy_strerror(curl_code));
-            goto end_gps_thread;
+    const char *nav_file = sim->nav_file_name;
+    if (sim->use_ftp) {
+        nav_file = sim->use_rinex3 ? RINEX3_FILE_NAME : RINEX2_FILE_NAME;
+        gui_status_wprintw(GREEN, "Downloading RINEX v%u ephemeris.\n", sim->use_rinex3 ? 3 : 2);
+        CURLcode res = download_nav_file(sim->use_rinex3, nav_file, &sim->main_exit);
+        if (res != CURLE_OK) {
+            gui_status_wprintw(RED, "Ephemeris download failed: %s\n", curl_easy_strerror(res));
+            return false;
         }
     }
 
-    neph = readRinex(eph, &ionoutc, nav_file, simulator->use_rinex3);
+    c->ionoutc.enable = sim->ionosphere_enable;
+    c->neph = readRinex(c->eph, &c->ionoutc, nav_file, sim->use_rinex3);
 
-    if (neph <= 0) { // 0 = no sets, negative = file could not be read or has wrong format
+    if (c->neph <= 0) { // 0 = no sets, negative = file could not be read or has wrong format
         gui_status_wprintw(RED, "No ephemeris available.\n");
-        goto end_gps_thread;
+        return false;
     }
 
-    if (simulator->show_verbose) {
-        if (ionoutc.vflg && ionoutc.enable) {
-            gui_mvwprintw(LS_FIX, 14, 40, "ION ALPHA %12.3e %12.3e %12.3e %12.3e",
-                    ionoutc.alpha0, ionoutc.alpha1, ionoutc.alpha2, ionoutc.alpha3);
-            gui_mvwprintw(LS_FIX, 15, 40, "ION BETA  %12.3e %12.3e %12.3e %12.3e",
-                    ionoutc.beta0, ionoutc.beta1, ionoutc.beta2, ionoutc.beta3);
-            gui_mvwprintw(LS_FIX, 16, 40, "DELTA UTC %12.3e %12.3e %9d  %9d",
-                    ionoutc.A0, ionoutc.A1, ionoutc.tot, ionoutc.wnt);
-            gui_mvwprintw(LS_FIX, 17, 40, "LEAP SECONDS %d", ionoutc.dtls);
+    if (sim->show_verbose) {
+        const ionoutc_t *io = &c->ionoutc;
+        if (io->vflg && io->enable) {
+            gui_mvwprintw(LS_FIX, LS_ROW_IONO, LS_COL_INFO, "ION ALPHA %12.3e %12.3e %12.3e %12.3e",
+                    io->alpha0, io->alpha1, io->alpha2, io->alpha3);
+            gui_mvwprintw(LS_FIX, LS_ROW_IONO + 1, LS_COL_INFO, "ION BETA  %12.3e %12.3e %12.3e %12.3e",
+                    io->beta0, io->beta1, io->beta2, io->beta3);
+            gui_mvwprintw(LS_FIX, LS_ROW_IONO + 2, LS_COL_INFO, "DELTA UTC %12.3e %12.3e %9d  %9d",
+                    io->A0, io->A1, io->tot, io->wnt);
+            gui_mvwprintw(LS_FIX, LS_ROW_IONO + 3, LS_COL_INFO, "LEAP SECONDS %d", io->dtls);
         } else {
-            gui_mvwprintw(LS_FIX, 14, 40, "Ionospheric data invalid or disabled!");
+            gui_mvwprintw(LS_FIX, LS_ROW_IONO, LS_COL_INFO, "Ionospheric data invalid or disabled!");
         }
     }
+    return true;
+}
 
-    // Read user motion file if any
-    if (simulator->motion_file_name != NULL) {
-        numd = readUserMotion(xyz, simulator->motion_file_name);
-        if (numd <= 0) {
-            gui_status_wprintw(RED, "Failed to read user motion file.\n");
-            goto end_gps_thread;
-        }
-        gui_status_wprintw(GREEN, "%u user motion points applied.\n", numd);
-        if (numd > simulator->duration) {
-            numd = simulator->duration;
-        }
+/* Replace the user motion with the one from the -m file. */
+static bool loadMotionFile(gps_ctx_t *c) {
+    simulator_t *sim = c->sim;
+
+    if (sim->motion_file_name == NULL)
+        return true;
+
+    c->numd = readUserMotion(c->xyz, sim->motion_file_name);
+    if (c->numd <= 0) {
+        gui_status_wprintw(RED, "Failed to read user motion file.\n");
+        return false;
+    }
+    gui_status_wprintw(GREEN, "%u user motion points applied.\n", c->numd);
+    if (c->numd > sim->duration) {
+        c->numd = sim->duration;
+    }
+    return true;
+}
+
+/* Set the scenario start time g0, shifting the ephemeris to it for -s now. */
+static bool selectStartTime(gps_ctx_t *c) {
+    simulator_t *sim = c->sim;
+    datetime_t ttmp;
+    datetime_t tmin = {0}, tmax = {0};
+    gpstime_t gmin = {0, 0.0}, gmax = {0, 0.0};
+    gpstime_t gtmp;
+
+    c->g0.week = -1; // Invalid start time
+    if (sim->start.m >= 1) { // Zero month means no -s given
+        date2gps(&sim->start, &c->g0);
     }
 
-    for (sv = 0; sv < MAX_SAT; sv++) {
-        if (eph[0][sv].vflg == true) {
-            gmin = eph[0][sv].toc;
-            tmin = eph[0][sv].t;
+    for (int sv = 0; sv < MAX_SAT; sv++) {
+        if (c->eph[0][sv].vflg == true) {
+            gmin = c->eph[0][sv].toc;
+            tmin = c->eph[0][sv].t;
             break;
         }
     }
 
-    gmax.sec = 0;
-    gmax.week = 0;
-    tmax.sec = 0;
-    tmax.mm = 0;
-    tmax.hh = 0;
-    tmax.d = 0;
-    tmax.m = 0;
-    tmax.y = 0;
-    for (sv = 0; sv < MAX_SAT; sv++) {
-        if (eph[neph - 1][sv].vflg == true) {
-            gmax = eph[neph - 1][sv].toc;
-            tmax = eph[neph - 1][sv].t;
+    for (int sv = 0; sv < MAX_SAT; sv++) {
+        if (c->eph[c->neph - 1][sv].vflg == true) {
+            gmax = c->eph[c->neph - 1][sv].toc;
+            tmax = c->eph[c->neph - 1][sv].t;
             break;
         }
     }
 
-    if (g0.week >= 0) // Scenario start time has been set.
-    {
-        if (simulator->time_overwrite == true) {
-            double dsec;
+    if (c->g0.week >= 0) { // Scenario start time has been set.
+        if (sim->time_overwrite == true) {
+            gtmp.week = c->g0.week;
+            gtmp.sec = (double) (((int) (c->g0.sec)) / 7200)*7200.0;
 
-            gtmp.week = g0.week;
-            gtmp.sec = (double) (((int) (g0.sec)) / 7200)*7200.0;
-
-            dsec = subGpsTime(gtmp, gmin);
+            double dsec = subGpsTime(gtmp, gmin);
 
             // Overwrite the UTC reference week number
-            ionoutc.wnt = gtmp.week;
-            ionoutc.tot = (int) gtmp.sec;
-
-            // Iono/UTC parameters may no longer valid
-            //ionoutc.vflg = FALSE;
+            c->ionoutc.wnt = gtmp.week;
+            c->ionoutc.tot = (int) gtmp.sec;
 
             // Overwrite the TOC and TOE to the scenario start time
-            for (sv = 0; sv < MAX_SAT; sv++) {
-                for (i = 0; i < neph; i++) {
-                    if (eph[i][sv].vflg == true) {
-                        gtmp = incGpsTime(eph[i][sv].toc, dsec);
-                        gps2date(&gtmp, &ttmp);
-                        eph[i][sv].toc = gtmp;
-                        eph[i][sv].t = ttmp;
-
-                        gtmp = incGpsTime(eph[i][sv].toe, dsec);
-                        eph[i][sv].toe = gtmp;
+            for (int sv = 0; sv < MAX_SAT; sv++) {
+                for (int i = 0; i < c->neph; i++) {
+                    ephem_t *e = &c->eph[i][sv];
+                    if (e->vflg == true) {
+                        e->toc = incGpsTime(e->toc, dsec);
+                        gps2date(&e->toc, &ttmp);
+                        e->t = ttmp;
+                        e->toe = incGpsTime(e->toe, dsec);
                     }
                 }
             }
-        } else {
-            if (subGpsTime(g0, gmin) < 0.0 || subGpsTime(gmax, g0) < 0.0) {
-                gui_status_wprintw(RED, "Invalid start time.\n");
-                gui_status_wprintw(RED, "tmin = %4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)\n",
-                        tmin.y, tmin.m, tmin.d, tmin.hh, tmin.mm, tmin.sec,
-                        gmin.week, gmin.sec);
-                gui_status_wprintw(RED, "tmax = %4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)\n",
-                        tmax.y, tmax.m, tmax.d, tmax.hh, tmax.mm, tmax.sec,
-                        gmax.week, gmax.sec);
-                goto end_gps_thread;
-            }
+        } else if (subGpsTime(c->g0, gmin) < 0.0 || subGpsTime(gmax, c->g0) < 0.0) {
+            gui_status_wprintw(RED, "Invalid start time.\n");
+            gui_status_wprintw(RED, "tmin = %4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)\n",
+                    tmin.y, tmin.m, tmin.d, tmin.hh, tmin.mm, tmin.sec, gmin.week, gmin.sec);
+            gui_status_wprintw(RED, "tmax = %4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)\n",
+                    tmax.y, tmax.m, tmax.d, tmax.hh, tmax.mm, tmax.sec, gmax.week, gmax.sec);
+            return false;
         }
     } else {
-        g0 = gmin;
-        simulator->start = tmin;
+        c->g0 = gmin;
+        sim->start = tmin;
     }
 
-    gui_mvwprintw(LS_FIX, 8, 40, "RINEX date:      %s", rinex_date);
-    gui_mvwprintw(LS_FIX, 10, 40, "Start time:      %4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)",
-            simulator->start.y, simulator->start.m, simulator->start.d, simulator->start.hh, simulator->start.mm, simulator->start.sec, g0.week, g0.sec);
-    if (simulator->show_verbose) {
-        gui_mvwprintw(LS_FIX, 11, 40, "Simulation time: ");
+    gui_mvwprintw(LS_FIX, LS_ROW_RINEX, LS_COL_INFO, "RINEX date:      %s", rinex_date);
+    gui_mvwprintw(LS_FIX, LS_ROW_START, LS_COL_INFO, "Start time:      %4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)",
+            sim->start.y, sim->start.m, sim->start.d, sim->start.hh, sim->start.mm, sim->start.sec, c->g0.week, c->g0.sec);
+    if (sim->show_verbose) {
+        gui_mvwprintw(LS_FIX, LS_ROW_SIMTIME, LS_COL_INFO, "Simulation time: ");
     }
-    gui_mvwprintw(LS_FIX, 7, 40, "Duration:        %.1fs", ((double) numd) / 10.0);
+    gui_mvwprintw(LS_FIX, LS_ROW_DURATION, LS_COL_INFO, "Duration:        %.1fs", ((double) c->numd) / 10.0);
 
     // Select the current set of ephemerides
-    ieph = -1;
-
-    for (i = 0; i < neph; i++) {
-        for (sv = 0; sv < MAX_SAT; sv++) {
-            if (eph[i][sv].vflg == true) {
-                dt = subGpsTime(g0, eph[i][sv].toc);
+    c->ieph = -1;
+    for (int i = 0; i < c->neph && c->ieph < 0; i++) {
+        for (int sv = 0; sv < MAX_SAT; sv++) {
+            if (c->eph[i][sv].vflg == true) {
+                double dt = subGpsTime(c->g0, c->eph[i][sv].toc);
                 if (dt >= -SECONDS_IN_HOUR && dt < SECONDS_IN_HOUR) {
-                    ieph = i;
+                    c->ieph = i;
                     break;
                 }
             }
         }
-
-        if (ieph >= 0) // ieph has been set
-            break;
     }
 
-    if (ieph == -1) {
+    if (c->ieph == -1) {
         gui_status_wprintw(RED, "No current set of ephemerides has been found.\n");
-        goto end_gps_thread;
+        return false;
+    }
+    return true;
+}
+
+/* Download (-f) or read the almanac and check it is close to the scenario time. */
+static bool loadAlmanac(gps_ctx_t *c) {
+    simulator_t *sim = c->sim;
+    datetime_t ttmp;
+    gpstime_t gtmp;
+
+    c->alm = almanac_init();
+    if (sim->almanac_enable) {
+        CURLcode res = sim->use_ftp ? almanac_download(&sim->main_exit) : almanac_read_file();
+
+        switch (res) {
+            case CURLE_OK:
+                break;
+            case CURLE_REMOTE_FILE_NOT_FOUND:
+                gui_status_wprintw(RED, "Almanac file not found!\n");
+                break;
+            case CURLE_READ_ERROR:
+                gui_status_wprintw(RED, "Error reading almanac file!\n");
+                break;
+            default:
+                gui_status_wprintw(RED, "Almanac error, code: %d\n", res);
+                break;
+        }
     }
 
-    ////////////////////////////////////////////////////////////
-    // Read almanac
-    ////////////////////////////////////////////////////////////
-
-    almanac_gps_t *alm = almanac_init();
-    if (simulator->almanac_enable) {
-        if (simulator->use_ftp) {
-            curl_code = almanac_download(&simulator->main_exit);
-        } else {
-            curl_code = almanac_read_file();
-        }
-
-        if (curl_code != CURLE_OK) {
-            switch (curl_code) {
-                case CURLE_REMOTE_FILE_NOT_FOUND:
-                    gui_status_wprintw(RED, "Almanac file not found!\n");
-                    break;
-                case CURLE_READ_ERROR:
-                    gui_status_wprintw(RED, "Error reading almanac file!\n");
-                    break;
-                default:
-                    gui_status_wprintw(RED, "Almanac error, code: %d\n", curl_code);
-                    break;
-            }
-        }
-    }
-
-    if (simulator->almanac_enable && alm->valid) {
+    if (sim->almanac_enable && c->alm->valid) {
         gtmp.sec = 0.0;
         gtmp.week = 0;
-        // Check TOA
-        for (sv = 0; sv < MAX_SAT; sv++) {
-            if (alm->sv[sv].valid != 0) // Valid almanac
-            {
-                alm->sv[sv].toa.week = resolveWeek(alm->sv[sv].toa.week, g0.week);
-                gtmp = alm->sv[sv].toa;
-                dt = subGpsTime(alm->sv[sv].toa, g0);
+        for (int sv = 0; sv < MAX_SAT; sv++) {
+            almanac_prn_t *a = &c->alm->sv[sv];
+            if (a->valid != 0) {
+                a->toa.week = resolveWeek(a->toa.week, c->g0.week);
+                gtmp = a->toa;
+                double dt = subGpsTime(a->toa, c->g0);
                 if (dt < (-4.0 * SECONDS_IN_WEEK) || dt > (4.0 * SECONDS_IN_WEEK)) {
                     gui_status_wprintw(RED, "Invalid time of almanac.\n");
-                    goto end_gps_thread;
+                    return false;
                 }
             }
         }
         gps2date(&gtmp, &ttmp);
-        gui_mvwprintw(LS_FIX, 9, 40, "Almanac date:    %4d/%02d/%02d,%02d:%02d:%02.0f",
+        gui_mvwprintw(LS_FIX, LS_ROW_ALMANAC, LS_COL_INFO, "Almanac date:    %4d/%02d/%02d,%02d:%02d:%02.0f",
                 ttmp.y, ttmp.m, ttmp.d, ttmp.hh, ttmp.mm, ttmp.sec);
     } else {
-        gui_mvwprintw(LS_FIX, 9, 40, "Almanac date:    Disabled or invalid.");
+        gui_mvwprintw(LS_FIX, LS_ROW_ALMANAC, LS_COL_INFO, "Almanac date:    Disabled or invalid.");
     }
+    return true;
+}
 
-    ////////////////////////////////////////////////////////////
-    // Initialize channels
-    ////////////////////////////////////////////////////////////
+/* Allocate the satellites visible at the start and set up the antenna pattern. */
+static void initChannels(gps_ctx_t *c) {
+    for (int i = 0; i < MAX_CHAN; i++)
+        c->chan[i].prn = 0;
 
-    // Clear all channels
-    for (i = 0; i < MAX_CHAN; i++)
-        chan[i].prn = 0;
-
-    // Clear satellite allocation flag
-    for (sv = 0; sv < MAX_SAT; sv++)
+    for (int sv = 0; sv < MAX_SAT; sv++)
         allocatedSat[sv] = -1;
 
-    // Initial reception time
-    grx = incGpsTime(g0, 0.0);
+    c->grx = incGpsTime(c->g0, 0.0);
+    allocateChannel(c->chan, c->alm, c->eph[c->ieph], c->ionoutc, c->grx, c->xyz[0], 0.0);
+    showChannels(c);
 
-    // Allocate visible satellites
-    allocateChannel(chan, alm, eph[ieph], ionoutc, grx, xyz[0], elvmask);
+    for (int i = 0; i < 37; i++)
+        c->ant_pat[i] = pow(10.0, -ant_pat_db[i] / 20.0);
 
-    for (i = 0; i < MAX_CHAN; i++) {
-        if (chan[i].prn > 0) {
-            gui_mvwprintw(LS_FIX, start_y++, 1, "%02d %6.1f %5.1f %11.1f %5.1f", chan[i].prn,
-                    chan[i].azel[0] * R2D, chan[i].azel[1] * R2D, chan[i].rho0.d, chan[i].rho0.iono_delay);
+    c->grx = incGpsTime(c->grx, 0.1);
+}
+
+/* Move the user by the speed and heading set in the interactive mode. */
+static void moveUser(gps_ctx_t *c, int iumd) {
+    const target_t *target = &c->sim->target;
+    double dir = (target->bearing / 1000) / R2D;
+    double neu[3];
+
+    // Stay at the current location, then move by one 0.1 s step
+    neu[0] = (target->velocity * cos(dir)) * 0.1;
+    neu[1] = (target->velocity * sin(dir)) * 0.1;
+    neu[2] = target->vertical_speed * 0.1;
+
+    c->xyz[iumd][0] = c->xyz[iumd - 1][0] + (c->tmat[0][0] * neu[0] + c->tmat[1][0] * neu[1] + c->tmat[2][0] * neu[2]);
+    c->xyz[iumd][1] = c->xyz[iumd - 1][1] + (c->tmat[0][1] * neu[0] + c->tmat[1][1] * neu[1] + c->tmat[2][1] * neu[2]);
+    c->xyz[iumd][2] = c->xyz[iumd - 1][2] + (c->tmat[0][2] * neu[0] + c->tmat[1][2] * neu[1] + c->tmat[2][2] * neu[2]);
+}
+
+/* Update range, code phase and signal gain of every channel for the next 0.1 s. */
+static void updateChannels(gps_ctx_t *c, int iumd) {
+    for (int i = 0; i < MAX_CHAN; i++) {
+        channel_t *ch = &c->chan[i];
+        if (ch->prn > 0) {
+            range_t rho;
+
+            computeRange(&rho, c->eph[c->ieph][ch->prn - 1], &c->ionoutc, c->grx, c->xyz[iumd]);
+
+            ch->azel[0] = rho.azel[0];
+            ch->azel[1] = rho.azel[1];
+
+            computeCodePhase(ch, rho, 0.1);
+#ifndef FLOAT_CARR_PHASE
+            ch->carr_phasestep = (int) round(512.0 * 65536.0 * ch->f_carr * SAMPLE_PERIOD);
+#endif
+            double path_loss = 20200000.0 / rho.d;
+
+            // Receiver antenna gain by boresight angle
+            int ibs = (int) ((90.0 - rho.azel[1] * R2D) / 5.0);
+            c->gain[i] = path_loss * c->ant_pat[ibs];
+
+            // Pluto SDR needs more signal strength due to its 12 bit DAC range,
+            // otherwise the signal dynamic range is very low. Best value to be defined.
+            if (c->sim->sdr_type == SDR_PLUTOSDR) {
+                c->gain[i] *= 2;
+            }
         }
     }
-    gui_mvwprintw(LS_FIX, 3, 40, "Nav: %02d satellites", start_y - 4);
+}
 
-    // Receiver antenna gain pattern
-    for (i = 0; i < 37; i++)
-        ant_pat[i] = pow(10.0, -ant_pat_db[i] / 20.0);
+/* Generate 0.1 s of IQ samples into c->iq_buff. */
+static void generateSamples(gps_ctx_t *c) {
+    channel_t *chan = c->chan;
+    const double *gain = c->gain;
+    const double delt = SAMPLE_PERIOD;
 
-    // Update receiver time
-    grx = incGpsTime(grx, 0.1);
+    for (int isamp = 0; isamp < NUM_IQ_SAMPLES; isamp++) {
+        int i_acc = 0;
+        int q_acc = 0;
 
-    // Create IQ buffer.
-    iq_buff = calloc(IQ_BUFFER_SIZE, 2);
+        for (int i = 0; i < MAX_CHAN; i++) {
+            if (chan[i].prn > 0) {
+                int iTable;
+#ifdef FLOAT_CARR_PHASE
+                // carr_phase 0.0 - 1.0
+                iTable = (int) floor(chan[i].carr_phase * 512.0);
+#else
+                iTable = (chan[i].carr_phase >> 16) & 511; // 9-bit index
+#endif
+                // dataBit and codeCA are -1 or 1
+                int ip = chan[i].dataBit * chan[i].codeCA * cosTable512[iTable] * gain[i];
+                int qp = chan[i].dataBit * chan[i].codeCA * sinTable512[iTable] * gain[i];
 
-    // Acquire first fifo block for transfer buffer
-    struct iq_buf *iq = fifo_acquire();
+                // Accumulate for all visible satellites
+                i_acc += ip;
+                q_acc += qp;
+
+                // Update code phase
+                chan[i].code_phase += chan[i].f_code * delt;
+
+                if (chan[i].code_phase >= CA_SEQ_LEN) {
+                    chan[i].code_phase -= CA_SEQ_LEN;
+
+                    chan[i].icode++;
+
+                    if (chan[i].icode >= 20) { // 20 C/A codes = 1 navigation data bit
+                        chan[i].icode = 0;
+                        chan[i].ibit++;
+
+                        if (chan[i].ibit >= 30) { // 30 navigation data bits = 1 word
+                            chan[i].ibit = 0;
+                            chan[i].iword++;
+                        }
+
+                        // Set new navigation data bit
+                        chan[i].dataBit = (int) ((chan[i].dwrd[chan[i].iword]>>(29 - chan[i].ibit)) & 0x1UL)*2 - 1;
+                    }
+                }
+
+                // Set current code chip
+                chan[i].codeCA = chan[i].ca[(int) chan[i].code_phase]*2 - 1;
+
+                // Update carrier phase
+#ifdef FLOAT_CARR_PHASE
+                chan[i].carr_phase += chan[i].f_carr * delt;
+
+                if (chan[i].carr_phase >= 1.0)
+                    chan[i].carr_phase -= 1.0;
+                else if (chan[i].carr_phase < 0.0)
+                    chan[i].carr_phase += 1.0;
+#else
+                chan[i].carr_phase += chan[i].carr_phasestep;
+#endif
+            }
+        }
+
+        c->iq_buff[isamp * 2] = (short) i_acc;
+        c->iq_buff[isamp * 2 + 1] = (short) q_acc;
+    }
+}
+
+/* Copy the samples into FIFO blocks for the SDR thread.
+ * iq Block being filled
+ * The block to fill next, NULL if the FIFO has been halted
+ */
+static struct iq_buf *queueSamples(const gps_ctx_t *c, struct iq_buf *iq) {
+    const simulator_t *sim = c->sim;
+
+    for (int isamp = 0; isamp < IQ_BUFFER_SIZE; isamp++) {
+        // validLength starts with 0 on acquire
+        if (sim->sample_size == SC16) {
+            iq->data16[iq->validLength] = c->iq_buff[isamp];
+        } else {
+            iq->data8[iq->validLength] = c->iq_buff[isamp] >> 4;
+        }
+        iq->validLength += 1;
+        if (sim->sdr_type == SDR_HACKRF) {
+            // HackRF takes fixed size blocks, a partly filled one is kept for the next round
+            if (iq->validLength == HACKRF_TRANSFER_BUFFER_SIZE) {
+                fifo_enqueue(iq);
+                iq = fifo_acquire();
+                if (iq == NULL) {
+                    return NULL;
+                }
+            }
+        }
+    }
+
+    // File writer and Pluto SDR take the entire IQ buffer at once.
+    if (sim->sdr_type == SDR_IQFILE || sim->sdr_type == SDR_PLUTOSDR) {
+        fifo_enqueue(iq);
+        iq = fifo_acquire();
+    }
+    return iq;
+}
+
+/* Every 30 s: next navigation message frame, newer ephemeris, channel allocation. */
+static void updateNavigation(gps_ctx_t *c, int iumd, const double *llh) {
+    simulator_t *sim = c->sim;
+
+    for (int i = 0; i < MAX_CHAN; i++) {
+        if (c->chan[i].prn > 0) {
+            generateNavMsg(c->grx, &c->chan[i], 0);
+        }
+    }
+
+    // Switch to the next set of ephemerides once it is due
+    if (c->ieph + 1 < c->neph) {
+        for (int sv = 0; sv < MAX_SAT; sv++) {
+            if (c->eph[c->ieph + 1][sv].vflg == true) {
+                if (subGpsTime(c->eph[c->ieph + 1][sv].toc, c->grx) < SECONDS_IN_HOUR) {
+                    c->ieph++;
+
+                    for (int i = 0; i < MAX_CHAN; i++) {
+                        // Generate new subframes if allocated
+                        if (c->chan[i].prn != 0)
+                            eph2sbf(c->eph[c->ieph][c->chan[i].prn - 1], c->ionoutc, c->alm, c->chan[i].sbf);
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    allocateChannel(c->chan, c->alm, c->eph[c->ieph], c->ionoutc, c->grx, c->xyz[iumd], 0.0);
+
+    if (sim->show_verbose) {
+        gps2date(&c->grx, &sim->start);
+        gui_mvwprintw(LS_FIX, LS_ROW_SIMTIME, LS_COL_SIMTIME, "%4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)",
+                sim->start.y, sim->start.m, sim->start.d, sim->start.hh, sim->start.mm, sim->start.sec, c->grx.week, c->grx.sec);
+        gui_mvwprintw(LS_FIX, LS_ROW_XYZ, LS_COL_INFO, "xyz = %11.1f, %11.1f, %11.1f", c->xyz[iumd][0], c->xyz[iumd][1], c->xyz[iumd][2]);
+        gui_mvwprintw(LS_FIX, LS_ROW_LLH, LS_COL_INFO, "llh = %11.6f, %11.6f, %11.1f", llh[0] * R2D, llh[1] * R2D, llh[2]);
+        showChannels(c);
+    }
+}
+
+void *gps_thread_ep(void *arg) {
+    simulator_t *simulator = (simulator_t *) (arg);
+    gps_ctx_t *c = calloc(1, sizeof (*c));
+    struct iq_buf *iq = NULL;
+
+    thread_to_core(CORE_GPS);
+    set_thread_name("gps-thread");
+
+    if (c == NULL) {
+        gui_status_wprintw(RED, "Failed to allocate simulation memory.\n");
+        goto end_gps_thread;
+    }
+    c->sim = simulator;
+
+    if (!initUserPosition(c) || !loadEphemeris(c) || !loadMotionFile(c) || !selectStartTime(c) || !loadAlmanac(c))
+        goto end_gps_thread;
+
+    initChannels(c);
+
+    c->iq_buff = calloc(IQ_BUFFER_SIZE, sizeof (short));
+    if (c->iq_buff == NULL) {
+        gui_status_wprintw(RED, "Failed to allocate IQ buffer.\n");
+        goto end_gps_thread;
+    }
+
+    // First fifo block for the transfer buffer
+    iq = fifo_acquire();
     if (iq == NULL) { // FIFO halted
         goto end_gps_thread;
     }
 
-    ////////////////////////////////////////////////////////////
-    // Generate baseband signals
-    ////////////////////////////////////////////////////////////
-    for (iumd = 1; iumd < numd; iumd++) {
+    for (int iumd = 1; iumd < c->numd; iumd++) {
         if (simulator->gps_thread_exit) {
             break;
         }
@@ -2066,239 +2266,41 @@ void *gps_thread_ep(void *arg) {
         }
 
         if (simulator->interactive_mode) {
-            // Stay at the current location
-            xyz[iumd][0] = xyz[iumd - 1][0];
-            xyz[iumd][1] = xyz[iumd - 1][1];
-            xyz[iumd][2] = xyz[iumd - 1][2];
-
-            // Update the target location
-            double dir = (simulator->target.bearing / 1000) / R2D;
-            neu[0] = (simulator->target.velocity * cos(dir)) * 0.1;
-            neu[1] = (simulator->target.velocity * sin(dir)) * 0.1;
-            neu[2] = simulator->target.vertical_speed * 0.1;
-
-            xyz[iumd][0] += tmat[0][0] * neu[0] + tmat[1][0] * neu[1] + tmat[2][0] * neu[2];
-            xyz[iumd][1] += tmat[0][1] * neu[0] + tmat[1][1] * neu[1] + tmat[2][1] * neu[2];
-            xyz[iumd][2] += tmat[0][2] * neu[0] + tmat[1][2] * neu[1] + tmat[2][2] * neu[2];
+            moveUser(c, iumd);
         }
 
-        for (i = 0; i < MAX_CHAN; i++) {
-            if (chan[i].prn > 0) {
-                // Refresh code phase and data bit counters
-                range_t rho;
-                sv = chan[i].prn - 1;
+        updateChannels(c, iumd);
+        generateSamples(c);
 
-                // Current pseudorange
-                computeRange(&rho, eph[ieph][sv], &ionoutc, grx, xyz[iumd]);
-
-                chan[i].azel[0] = rho.azel[0];
-                chan[i].azel[1] = rho.azel[1];
-
-                // Update code phase and data bit counters
-                computeCodePhase(&chan[i], rho, 0.1);
-#ifndef FLOAT_CARR_PHASE
-                chan[i].carr_phasestep = (int) round(512.0 * 65536.0 * chan[i].f_carr * delt);
-#endif
-                // Path loss
-                path_loss = 20200000.0 / rho.d;
-
-                // Receiver antenna gain
-                ibs = (int) ((90.0 - rho.azel[1] * R2D) / 5.0); // covert elevation to boresight
-                ant_gain = ant_pat[ibs];
-
-                // Signal gain
-                gain[i] = (double) (path_loss * ant_gain);
-                // Pluto SDR needs more signal strength due to 12 bit DAC range.
-                // Otherwise signal dynamic range is very low.
-                if (simulator->sdr_type == SDR_PLUTOSDR) {
-                    // Will result in larger IQ values, hence higher signal amplitude.
-                    // Best value to be defined.
-                    gain[i] *= 2;
-                }
-            }
+        iq = queueSamples(c, iq);
+        if (iq == NULL) {
+            goto end_gps_thread;
         }
 
-        for (isamp = 0; isamp < NUM_IQ_SAMPLES; isamp++) {
-            int i_acc = 0.0f;
-            int q_acc = 0.0f;
-
-            for (i = 0; i < MAX_CHAN; i++) {
-                if (chan[i].prn > 0) {
-#ifdef FLOAT_CARR_PHASE
-                    // carr_phase 0.0 - 1.0          
-                    iTable = (int) floor(chan[i].carr_phase * 512.0);
-#else
-                    iTable = (chan[i].carr_phase >> 16) & 511; // 9-bit index
-#endif
-                    // dataBit -1 or 1
-                    // codeCA  -1 or 1
-                    ip = chan[i].dataBit * chan[i].codeCA * cosTable512[iTable] * gain[i];
-                    qp = chan[i].dataBit * chan[i].codeCA * sinTable512[iTable] * gain[i];
-
-                    // Accumulate for all visible satellites
-                    i_acc += ip;
-                    q_acc += qp;
-
-                    // Update code phase
-                    chan[i].code_phase += chan[i].f_code * delt;
-
-                    if (chan[i].code_phase >= CA_SEQ_LEN) {
-                        chan[i].code_phase -= CA_SEQ_LEN;
-
-                        chan[i].icode++;
-
-                        if (chan[i].icode >= 20) // 20 C/A codes = 1 navigation data bit
-                        {
-                            chan[i].icode = 0;
-                            chan[i].ibit++;
-
-                            if (chan[i].ibit >= 30) // 30 navigation data bits = 1 word
-                            {
-                                chan[i].ibit = 0;
-                                chan[i].iword++;
-                                /*
-                                if (chan[i].iword>=N_DWRD)
-                                        fprintf(stderr, "\nWARNING: Subframe word buffer overflow.\n");
-                                 */
-                            }
-
-                            // Set new navigation data bit
-                            chan[i].dataBit = (int) ((chan[i].dwrd[chan[i].iword]>>(29 - chan[i].ibit)) & 0x1UL)*2 - 1;
-                        }
-                    }
-
-                    // Set current code chip
-                    chan[i].codeCA = chan[i].ca[(int) chan[i].code_phase]*2 - 1;
-
-                    // Update carrier phase
-#ifdef FLOAT_CARR_PHASE
-                    chan[i].carr_phase += chan[i].f_carr * delt;
-
-                    if (chan[i].carr_phase >= 1.0)
-                        chan[i].carr_phase -= 1.0;
-                    else if (chan[i].carr_phase < 0.0)
-                        chan[i].carr_phase += 1.0;
-#else
-                    chan[i].carr_phase += chan[i].carr_phasestep;
-#endif
-                }
-            }
-
-            // Store I/Q samples into buffer
-            iq_buff[isamp * 2] = (short) i_acc;
-            iq_buff[isamp * 2 + 1] = (short) q_acc;
-        }
-
-        // Fill transfer fifo
-        for (isamp = 0; isamp < IQ_BUFFER_SIZE; isamp++) {
-            // validLength starts with 0 on acquire
-            if (simulator->sample_size == SC16) {
-                iq->data16[iq->validLength] = iq_buff[isamp];
-            } else {
-                iq->data8[iq->validLength] = iq_buff[isamp] >> 4;
-            }
-            iq->validLength += 1;
-            if (simulator->sdr_type == SDR_HACKRF) {
-                // Fill one fifo block until full
-                if (iq->validLength == HACKRF_TRANSFER_BUFFER_SIZE) {
-                    // Enqueue full fifo block
-                    fifo_enqueue(iq);
-                    // Get a new one and fill as long as we don't reach IQ_BUFFER_SIZE
-                    iq = fifo_acquire();
-                    if (iq == NULL) {
-                        goto end_gps_thread;
-                    }
-                }
-                // We don't enque a partly filled fifo block but keep it for the next round
-            }
-        }
-
-        // File writer and Pluto SDR taking the entire IQ buffer at once.
-        if (simulator->sdr_type == SDR_IQFILE || simulator->sdr_type == SDR_PLUTOSDR) {
-            // Enqueue full fifo block
-            fifo_enqueue(iq);
-            // Get a new one
-            iq = fifo_acquire();
-            if (iq == NULL) {
-                goto end_gps_thread;
-            }
-        }
-
-        //
-        // Update navigation message and channel allocation every 30 seconds
-        //
-        igrx = (int) (grx.sec * 10.0 + 0.5);
-
-        xyz2llh(xyz[iumd], llh);
+        double llh[3];
+        xyz2llh(c->xyz[iumd], llh);
         simulator->target.lat = llh[0] * R2D;
         simulator->target.lon = llh[1] * R2D;
         simulator->target.height = llh[2];
         gui_show_target(&simulator->target);
 
-        if (igrx % 300 == 0) // Every 30 seconds
-        {
-            // Update navigation message
-            for (i = 0; i < MAX_CHAN; i++) {
-                if (chan[i].prn > 0) {
-                    generateNavMsg(grx, &chan[i], 0);
-                }
-            }
-
-            // Refresh ephemeris and subframes
-            // Quick and dirty fix. Need more elegant way.
-            for (sv = 0; sv < MAX_SAT; sv++) {
-                if (eph[ieph + 1][sv].vflg == true) {
-                    dt = subGpsTime(eph[ieph + 1][sv].toc, grx);
-                    if (dt < SECONDS_IN_HOUR) {
-                        ieph++;
-                        if (ieph >= EPHEM_ARRAY_SIZE) {
-                            ieph = 0;
-                        }
-
-                        for (i = 0; i < MAX_CHAN; i++) {
-                            // Generate new subframes if allocated
-                            if (chan[i].prn != 0)
-                                eph2sbf(eph[ieph][chan[i].prn - 1], ionoutc, alm, chan[i].sbf);
-                        }
-                    }
-                    break;
-                }
-            }
-
-            // Update channel allocation from the current position
-            allocateChannel(chan, alm, eph[ieph], ionoutc, grx, xyz[iumd], elvmask);
-
-            if (simulator->show_verbose) {
-                gps2date(&grx, &simulator->start);
-                gui_mvwprintw(LS_FIX, 11, 57, "%4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)",
-                        simulator->start.y, simulator->start.m, simulator->start.d, simulator->start.hh, simulator->start.mm, simulator->start.sec, grx.week, grx.sec);
-                gui_mvwprintw(LS_FIX, 5, 40, "xyz = %11.1f, %11.1f, %11.1f", xyz[iumd][0], xyz[iumd][1], xyz[iumd][2]);
-                gui_mvwprintw(LS_FIX, 6, 40, "llh = %11.6f, %11.6f, %11.1f", llh[0] * R2D, llh[1] * R2D, llh[2]);
-                start_y = 4;
-                for (i = 0; i < MAX_CHAN; i++) {
-                    if (chan[i].prn > 0) {
-                        gui_mvwprintw(LS_FIX, start_y++, 1, "%02d %6.1f %5.1f %11.1f %5.1f", chan[i].prn,
-                                chan[i].azel[0] * R2D, chan[i].azel[1] * R2D, chan[i].rho0.d, chan[i].rho0.iono_delay);
-                    }
-                }
-
-                gui_mvwprintw(LS_FIX, 3, 40, "Nav: %02d satellites", start_y - 4);
-            }
+        if ((int) (c->grx.sec * 10.0 + 0.5) % 300 == 0) { // Every 30 seconds
+            updateNavigation(c, iumd, llh);
         }
-        // Update receiver time
-        grx = incGpsTime(grx, 0.1);
 
-        // Update time counter
-        gui_mvwprintw(LS_FIX, 12, 40, "Elapsed:         %5.1fs", subGpsTime(grx, g0));
+        c->grx = incGpsTime(c->grx, 0.1);
+        gui_mvwprintw(LS_FIX, LS_ROW_ELAPSED, LS_COL_INFO, "Elapsed:         %5.1fs", subGpsTime(c->grx, c->g0));
     }
 
     gui_status_wprintw(GREEN, "Simulation complete\n");
 
 end_gps_thread:
     fifo_producer_done();
-    free(iq_buff);
-    if (xyz)
-        free(xyz);
+    if (c != NULL) {
+        free(c->iq_buff);
+        free(c->xyz);
+        free(c);
+    }
     gui_status_wprintw(RED, "Exit GPS thread\n");
     pthread_mutex_lock(&(simulator->gps_lock));
     simulator->gps_thread_exit = true;
