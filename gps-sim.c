@@ -30,7 +30,15 @@
 #include "fifo.h"
 #include "gps-sim.h"
 
-simulator_t simulator;
+// Everything not listed here starts as zero, NULL or false.
+simulator_t simulator = {
+    .ionosphere_enable = true,
+    .almanac_enable = true,
+    .duration = USER_MOTION_SIZE,
+    .sample_size = SC08,
+    .gps_lock = PTHREAD_MUTEX_INITIALIZER,
+    .gps_init_done = PTHREAD_COND_INITIALIZER,
+};
 static bool gps_thread_started = false;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state);
@@ -66,33 +74,18 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
 
     switch (key) {
         case 'e':
-            if (arg == NULL) {
-                return ARGP_ERR_UNKNOWN;
-            }
             set_string(&simulator.nav_file_name, arg);
             break;
         case 'r':
-            if (arg == NULL) {
-                return ARGP_ERR_UNKNOWN;
-            }
             set_string(&simulator.sdr_name, arg);
             break;
         case 'U':
-            if (arg == NULL) {
-                return ARGP_ERR_UNKNOWN;
-            }
             set_string(&simulator.pluto_uri, arg);
             break;
         case 'N':
-            if (arg == NULL) {
-                return ARGP_ERR_UNKNOWN;
-            }
             set_string(&simulator.pluto_hostname, arg);
             break;
         case 'm':
-            if (arg == NULL) {
-                return ARGP_ERR_UNKNOWN;
-            }
             set_string(&simulator.motion_file_name, arg);
             simulator.interactive_mode = false;
             break;
@@ -100,9 +93,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             simulator.use_ftp = true;
             break;
         case 'l':
-            if (arg == NULL) {
-                return ARGP_ERR_UNKNOWN;
-            }
             simulator.location.height = 0.0; // Height is optional
             if (sscanf(arg, "%lf,%lf,%lf", &simulator.location.lat, &simulator.location.lon, &simulator.location.height) < 2 ||
                     fabs(simulator.location.lat) > 90.0 || fabs(simulator.location.lon) > 180.0) {
@@ -110,9 +100,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             }
             break;
         case 's':
-            if (arg == NULL) {
-                return ARGP_ERR_UNKNOWN;
-            }
             if (strncmp(arg, "now", 3) == 0) {
                 simulator.time_overwrite = true;
                 time_t timer;
@@ -151,15 +138,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             simulator.enable_tx_amp = true;
             break;
         case 'g':
-            if (arg == NULL) {
-                return ARGP_ERR_UNKNOWN;
-            }
             simulator.tx_gain = parse_int(arg, state, "gain");
             break;
         case 'd':
-            if (arg == NULL) {
-                return ARGP_ERR_UNKNOWN;
-            }
             d = atof(arg);
             if (d < 0.0 || d > ((double) USER_MOTION_SIZE) / 10.0) {
                 argp_error(state, "Invalid duration, maximum is %.1f seconds.", ((double) USER_MOTION_SIZE) / 10.0);
@@ -167,9 +148,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             simulator.duration = (int) (d * 10.0 + 0.5);
             break;
         case 't':
-            if (arg == NULL) {
-                return ARGP_ERR_UNKNOWN;
-            }
             simulator.target.valid = true;
             simulator.target.height = 0.0; // Height is optional
             if (sscanf(arg, "%lf,%lf,%lf", &simulator.target.distance, &simulator.target.bearing, &simulator.target.height) < 2) {
@@ -184,9 +162,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             simulator.use_rinex3 = true;
             break;
         case 'p':
-            if (arg == NULL) {
-                return ARGP_ERR_UNKNOWN;
-            }
             simulator.ppb = parse_int(arg, state, "ppb");
             if (abs(simulator.ppb) > 1000000) { // 1000 ppm, far beyond any crystal error
                 argp_error(state, "Oscillator error %d ppb is out of range (+-1000000).", simulator.ppb);
@@ -207,40 +182,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             return ARGP_ERR_UNKNOWN;
     }
     return 0;
-}
-
-static void simulator_init(void) {
-    simulator.main_exit = false;
-    simulator.show_verbose = false;
-    simulator.ionosphere_enable = true;
-    simulator.gps_thread_running = false;
-    simulator.interactive_mode = false;
-    simulator.use_ftp = false;
-    simulator.enable_tx_amp = false;
-    simulator.use_rinex3 = false;
-    simulator.time_overwrite = false;
-    simulator.almanac_enable = true;
-    simulator.duration = USER_MOTION_SIZE;
-    simulator.tx_gain = 0;
-    simulator.ppb = 0;
-    simulator.location.lat = 0;
-    simulator.location.lon = 0;
-    simulator.location.height = 0;
-    simulator.target.bearing = 0;
-    simulator.target.distance = 0;
-    simulator.target.lat = 0;
-    simulator.target.lon = 0;
-    simulator.target.height = 0;
-    simulator.target.valid = false;
-    simulator.nav_file_name = NULL;
-    simulator.sdr_name = NULL;
-    simulator.pluto_hostname = NULL;
-    simulator.motion_file_name = NULL;
-    simulator.pluto_uri = NULL;
-    simulator.sdr_type = SDR_NONE;
-    simulator.sample_size = SC08;
-    pthread_cond_init(&simulator.gps_init_done, NULL);
-    pthread_mutex_init(&simulator.gps_lock, NULL);
 }
 
 // Only async-signal-safe work here: the GUI takes a mutex and calls ncurses
@@ -275,8 +216,6 @@ static void cleanup_and_exit(int code) {
         pthread_join(simulator.gps_thread, NULL); /* Wait on GPS read thread exit */
     }
 
-    pthread_cond_destroy(&simulator.gps_init_done);
-    pthread_mutex_destroy(&simulator.gps_lock);
 
     /* Free when pointing to string in heap (strdup allocated when given as run option) */
     if (simulator.use_ftp) {
@@ -333,7 +272,6 @@ int main(int argc, char** argv) {
     sigaction(SIGABRT, &sa, NULL);
 
     // Initialize all simulator variables
-    simulator_init();
     thread_to_core(CORE_MAIN);
     set_thread_name("simulator-thread");
 

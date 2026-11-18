@@ -22,25 +22,7 @@ static almanac_gps_t almanac_gps;
  * Initialize empty almanac.
  */
 almanac_gps_t* almanac_init(void) {
-    almanac_gps.valid = 0;
-    almanac_prn_t* a = NULL;
-    for (int prn = 0; prn < MAX_SAT; prn++) {
-        a = &almanac_gps.sv[prn];
-        a->health = 0;
-        a->svid = 0;
-        a->valid = 0;
-        a->toa.sec = 0.0;
-        a->toa.week = 0;
-        a->e = 0.0;
-        a->delta_i = 0.0;
-        a->omegadot = 0.0;
-        a->sqrta = 0.0;
-        a->omega0 = 0.0;
-        a->aop = 0.0;
-        a->m0 = 0.0;
-        a->af0 = 0.0;
-        a->af1 = 0.0;
-    }
+    memset(&almanac_gps, 0, sizeof (almanac_gps));
     return &almanac_gps;
 }
 
