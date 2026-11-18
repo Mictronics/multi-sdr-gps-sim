@@ -2183,6 +2183,7 @@ static int allocateChannel(channel_t *chan, almanac_gps_t *alm, ephem_t *eph, io
                     if (chan[i].prn == 0) {
                         // Initialize channel
                         chan[i].prn = sv + 1;
+                        chan[i].ipage = 0;
                         chan[i].azel[0] = azel[0];
                         chan[i].azel[1] = azel[1];
 

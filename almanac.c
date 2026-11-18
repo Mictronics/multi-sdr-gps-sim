@@ -72,7 +72,7 @@ static size_t fwrite_sem(void *buffer, size_t size, size_t nmemb, void *stream) 
  */
 CURLcode almanac_read_file(void) {
     char buf[100];
-    char title[24];
+    char title[25]; // 24 chars for %24s plus NUL
     char *pbuf;
     unsigned int n, week, sec, id;
     FILE *fp = fopen("almanac.sem", "rt");

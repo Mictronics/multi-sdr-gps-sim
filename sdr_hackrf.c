@@ -54,7 +54,7 @@ int sdr_hackrf_init(simulator_t *simulator) {
     }
 
     list = hackrf_device_list();
-    if (list->devicecount < 1) {
+    if (list == NULL || list->devicecount < 1) {
         gui_status_wprintw(RED, "No HackRF boards found.\n");
         return -1;
     }
@@ -229,7 +229,9 @@ void sdr_hackrf_close(void) {
         hackrf_set_txvga_gain(device, 0);
         hackrf_close(device);
     }
-    hackrf_device_list_free(list);
+    if (list != NULL) {
+        hackrf_device_list_free(list);
+    }
     hackrf_exit();
 }
 

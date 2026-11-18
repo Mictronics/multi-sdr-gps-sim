@@ -25,6 +25,7 @@
 #include "gps-sim.h"
 
 simulator_t simulator;
+static bool gps_thread_started = false;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state);
 const char *argp_program_version = "v1.0";
@@ -219,7 +220,9 @@ static void signal_handler(int sig) {
 
 static void cleanup_and_exit(int code) {
     simulator.gps_thread_exit = true;
-    pthread_join(simulator.gps_thread, NULL); /* Wait on GPS read thread exit */
+    if (gps_thread_started) {
+        pthread_join(simulator.gps_thread, NULL); /* Wait on GPS read thread exit */
+    }
 
     pthread_cond_destroy(&simulator.gps_init_done);
     pthread_mutex_destroy(&simulator.gps_lock);
@@ -311,7 +314,9 @@ int main(int argc, char** argv) {
     if (sdr_init(&simulator) == 0) {
         // Start GPS baseband signal generation
         gui_top_panel(LS_FIX);
-        pthread_create(&simulator.gps_thread, NULL, gps_thread_ep, &simulator);
+        if (pthread_create(&simulator.gps_thread, NULL, gps_thread_ep, &simulator) == 0) {
+            gps_thread_started = true;
+        }
 
         pthread_mutex_lock(&(simulator.gps_lock));
         int ret = pthread_cond_timedwait(&(simulator.gps_init_done), &(simulator.gps_lock), &timeout);

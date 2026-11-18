@@ -39,6 +39,7 @@ static struct iio_channel *tx0_i = NULL;
 static struct iio_channel *tx0_q = NULL;
 static struct iio_buffer *tx_buffer = NULL;
 static pthread_t pluto_tx_thread;
+static bool thread_started = false;
 static const int gui_y_offset = 4;
 static const int gui_x_offset = 2;
 
@@ -96,10 +97,10 @@ static void *pluto_tx_thread_ep(void *arg) {
 int sdr_pluto_init(simulator_t *simulator) {
     char buf[1024];
     struct iio_scan_context *scan_ctx;
-    struct iio_context_info **info;
+    struct iio_context_info **info = NULL;
     int ret;
     int y = gui_y_offset;
-    unsigned int irates[6];
+    unsigned int irates[6] = {0};
     long long lo_hz = 0;
     unsigned long xo_correction = 0;
 
@@ -132,7 +133,9 @@ int sdr_pluto_init(simulator_t *simulator) {
             }
         }
 
-        iio_context_info_list_free(info);
+        if (ret >= 0) {
+            iio_context_info_list_free(info);
+        }
         iio_scan_context_destroy(scan_ctx);
     }
 
@@ -257,7 +260,9 @@ void sdr_pluto_close(void) {
     pluto_tx_thread_exit = true;
     fifo_halt();
     fifo_destroy();
-    pthread_join(pluto_tx_thread, NULL);
+    if (thread_started) {
+        pthread_join(pluto_tx_thread, NULL);
+    }
 }
 
 int sdr_pluto_run(void) {
@@ -266,7 +271,7 @@ int sdr_pluto_run(void) {
             , "powerdown", false); // Turn ON TX LO
 
     fifo_wait_full();
-    pthread_create(&pluto_tx_thread, NULL, pluto_tx_thread_ep, NULL);
+    thread_started = pthread_create(&pluto_tx_thread, NULL, pluto_tx_thread_ep, NULL) == 0;
     return 0;
 }
 

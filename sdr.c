@@ -76,8 +76,9 @@ static sdr_handler *current_handler(void) {
 }
 
 int sdr_init(simulator_t *simulator) {
+    const char *name = simulator->sdr_name ? simulator->sdr_name : "none";
     for (int i = 0; sdr_handlers[i].name; ++i) {
-        if (!strcasecmp(sdr_handlers[i].name, simulator->sdr_name)) {
+        if (!strcasecmp(sdr_handlers[i].name, name)) {
             current_type = sdr_handlers[i].sdr_type;
             simulator->sdr_type = sdr_handlers[i].sdr_type;
         }

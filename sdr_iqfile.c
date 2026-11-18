@@ -17,6 +17,7 @@
 
 static atomic_bool iqfile_thread_exit = false;
 static pthread_t iqfile_thread;
+static bool thread_started = false;
 static int sample_size = SC08;
 
 static void *iqfile_thread_ep(void *arg) {
@@ -67,11 +68,13 @@ void sdr_iqfile_close(void) {
     iqfile_thread_exit = true;
     fifo_halt();
     fifo_destroy();
-    pthread_join(iqfile_thread, NULL);
+    if (thread_started) {
+        pthread_join(iqfile_thread, NULL);
+    }
 }
 
 int sdr_iqfile_run(void) {
     fifo_wait_full();
-    pthread_create(&iqfile_thread, NULL, iqfile_thread_ep, NULL);
+    thread_started = pthread_create(&iqfile_thread, NULL, iqfile_thread_ep, NULL) == 0;
     return 0;
 }
