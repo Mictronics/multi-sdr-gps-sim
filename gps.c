@@ -1316,23 +1316,25 @@ static double ionosphericDelay(const ionoutc_t *ionoutc, gpstime_t g, double *ll
     return (iono_delay);
 }
 
-/* Troposphere delay in metres: Saastamoinen model with a standard atmosphere (15 C and
- * 1013.25 hPa at sea level, 70 % humidity), as in RTKLIB, which phones' models are close to.
- * llh Receiver latitude, longitude (rad) and height (m); 0 above 10 km or for el <= 0
+/* Troposphere delay in metres: Saastamoinen zenith delay with a standard atmosphere (15 C and
+ * 1013.25 hPa at sea level, 70 % humidity), as in RTKLIB, and the Black-Eisner mapping of
+ * RTCA DO-229. Saastamoinen's own 1/sin(el) grows without bound near the horizon; this mapping
+ * stays below 22.4, so a setting satellite keeps a smooth range.
+ * llh Receiver latitude, longitude (rad) and height (m); 0 above 10 km
  */
 double tropoDelay(const double *llh, const double *azel) {
-    if (llh[2] < -100.0 || llh[2] > 1.0e4 || azel[1] <= 0.0)
+    if (llh[2] < -100.0 || llh[2] > 1.0e4)
         return 0.0;
 
     double h = llh[2] < 0.0 ? 0.0 : llh[2];
     double pres = 1013.25 * pow(1.0 - 2.2557e-5 * h, 5.2568); // hPa
     double temp = 15.0 - 6.5e-3 * h + 273.16; // K
     double e = 6.108 * 0.7 * exp((17.15 * temp - 4684.0) / (temp - 38.45)); // Water vapour pressure, hPa
-    double cosz = cos(PI / 2.0 - azel[1]);
+    double sel = sin(azel[1]);
 
-    double dry = 0.0022768 * pres / (1.0 - 0.00266 * cos(2.0 * llh[0]) - 0.00028 * h / 1e3) / cosz;
-    double wet = 0.002277 * (1255.0 / temp + 0.05) * e / cosz;
-    return dry + wet;
+    double dry = 0.0022768 * pres / (1.0 - 0.00266 * cos(2.0 * llh[0]) - 0.00028 * h / 1e3);
+    double wet = 0.002277 * (1255.0 / temp + 0.05) * e;
+    return (dry + wet) * 1.001 / sqrt(0.002001 + sel * sel);
 }
 
 /* Compute range between a satellite and the receiver
@@ -2110,7 +2112,7 @@ static void generateSamples(gps_ctx_t *c) {
 
         for (int i = 0; i < MAX_CHAN; i++) {
             if (chan[i].prn > 0) {
-                int iTable = (int) floor(chan[i].carr_phase * 512.0);
+                int iTable = (int) floor(chan[i].carr_phase * 512.0) & 511; // Masked: a NaN phase must not index outside
                 // dataBit and codeCA are -1 or 1; cosine is the sine 90 degrees (128 steps) ahead
                 int ip = chan[i].dataBit * chan[i].codeCA * sinTable512[(iTable + 128) & 511] * gain[i];
                 int qp = chan[i].dataBit * chan[i].codeCA * sinTable512[iTable] * gain[i];
@@ -2147,10 +2149,7 @@ static void generateSamples(gps_ctx_t *c) {
                 // Update carrier phase
                 chan[i].carr_phase += chan[i].f_carr * delt;
 
-                if (chan[i].carr_phase >= 1.0)
-                    chan[i].carr_phase -= 1.0;
-                else if (chan[i].carr_phase < 0.0)
-                    chan[i].carr_phase += 1.0;
+                chan[i].carr_phase -= floor(chan[i].carr_phase); // Back to [0, 1) for any step size
             }
         }
 
