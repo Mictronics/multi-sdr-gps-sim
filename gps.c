@@ -2205,8 +2205,8 @@ static struct iq_buf *queueSamples(const gps_ctx_t *c, struct iq_buf *iq) {
         }
     }
 
-    // File writer and Pluto SDR take the entire IQ buffer at once.
-    if (sim->sdr_type == SDR_IQFILE || sim->sdr_type == SDR_PLUTOSDR) {
+    // File writer, Pluto and LimeSDR take the entire IQ buffer at once.
+    if (sim->sdr_type == SDR_IQFILE || sim->sdr_type == SDR_PLUTOSDR || sim->sdr_type == SDR_LIMESDR) {
         fifo_enqueue(iq);
         iq = fifo_acquire();
     }

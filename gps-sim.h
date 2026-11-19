@@ -29,7 +29,7 @@
 
 /* SDR device types */
 typedef enum {
-    SDR_NONE = 0, SDR_IQFILE, SDR_HACKRF, SDR_PLUTOSDR
+    SDR_NONE = 0, SDR_IQFILE, SDR_HACKRF, SDR_PLUTOSDR, SDR_LIMESDR
 } sdr_type_t;
 
 /* Target information. */
@@ -84,7 +84,7 @@ typedef struct {
 } simulator_t;
 
 // CPU cores the threads are pinned to when available: the SDR TX thread is
-// either iqfile or Pluto (HackRF transmits from a libhackrf thread).
+// iqfile, Pluto or LimeSDR (HackRF transmits from a libhackrf thread).
 #define CORE_MAIN 1
 #define CORE_GPS 2
 #define CORE_SDR 3

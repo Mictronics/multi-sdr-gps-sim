@@ -1,5 +1,6 @@
 HACKRFSDR ?= no
 PLUTOSDR ?= no
+LIMESDR ?= no
 OPT ?= -O2
 CPPFLAGS += -I.
 
@@ -23,9 +24,16 @@ ifeq ($(PLUTOSDR), yes)
     LIBS_SDR += $(shell pkg-config --libs libiio libad9361)
 endif
 
+ifeq ($(LIMESDR), yes)
+    SDR_OBJ += sdr_lime.o
+    CPPFLAGS += -DENABLE_LIMESDR
+    # LimeSuiteNG's LimeSuite API wrapper (limesuiteng-legacyapi), it has no .pc file
+    LIBS_SDR += -llimesuiteng-legacyapi
+endif
+
 all: gps-sim
 
-# Objects depend on the build flags, so changing HACKRFSDR/PLUTOSDR/OPT rebuilds them.
+# Objects depend on the build flags, so changing HACKRFSDR/PLUTOSDR/LIMESDR/OPT rebuilds them.
 BUILD_FLAGS = .build-flags
 $(BUILD_FLAGS): FORCE
 	@echo '$(CC) $(CPPFLAGS) $(CFLAGS)' | cmp -s - $@ || echo '$(CC) $(CPPFLAGS) $(CFLAGS)' > $@

@@ -1,7 +1,7 @@
 # multi-sdr-gps-sim
 
 multi-sdr-gps-sim generates a GPS L1 baseband signal IQ data stream, which is then transmitted by a
-software-defined radio (SDR) platform. Supported at the moment are HackRF, ADLAM-Pluto and binary IQ file output.
+software-defined radio (SDR) platform. Supported at the moment are HackRF, ADLAM-Pluto, LimeSDR (Mini) and binary IQ file output.
 The software interacts with the user through a curses based text user interface (TUI) in terminal.
 
 Project based on work of [Takuji Ebinuma](https://github.com/osqzss/) and [IvanKor](https://github.com/IvanKor).
@@ -68,6 +68,78 @@ $ make
 $ sudo make install
 ```
 
+#### LimeSuiteNG for LimeSDR (built from source)
+
+The LimeSDR backend uses LimeSuiteNG's LimeSuite API wrapper (`lime/LimeSuite.h`, `liblimesuiteng-legacyapi`).
+The LimeSuiteNG 25.1 packages from repo.myriadrf.org do not transmit on a LimeSDR Mini v1, not even with their
+own `limeTRX` (the host sends packets, none reach the FPGA), so build the `develop` branch. Tested with commit 4032e99
+on Ubuntu 24.04.
+
+1. Remove the LimeSuiteNG packages (if installed) but keep their udev rules, so only one copy of the library exists:
+
+```
+$ sudo apt-mark manual limesuiteng-udev
+$ sudo apt remove limesuiteng liblimesuiteng limesuiteng-legacyapi limesuiteng-dev limesuiteng-cli \
+      limesuiteng-gui limesuiteng-soapysdr gr-limesuiteng limepcie-dkms
+```
+
+The old LimeSuite (`liblimesuite-dev`) cannot stay either, it installs the same `lime/LimeSuite.h`.
+
+2. Build dependencies: the GUI needs wxWidgets, the GNU Radio blocks `gnuradio-dev`, `pybind11-dev` and
+`python3-pygccxml`. GLEW is downloaded by the build when it is missing.
+
+```
+$ sudo apt install git cmake g++ libusb-1.0-0-dev libwxgtk3.2-dev gnuradio-dev pybind11-dev python3-pygccxml
+```
+
+3. Clone (a full clone, so a known commit can be checked out again), configure, build:
+
+```
+$ cd ~/git
+$ git clone -b develop https://github.com/myriadrf/LimeSuiteNG.git
+$ cd LimeSuiteNG
+$ git checkout 4032e99        # optional: the tested commit
+$ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+      -DBUILD_GUI=ON -DBUILD_PLUGINS=ON -DBUILD_PLUGINS_GNURADIO=ON \
+      -DBUILD_PLUGINS_SOAPYSDR=OFF -DBUILD_PLUGINS_AMARISOFT=OFF \
+      -DBUILD_DRIVERS=OFF -DBUILD_DOCS=OFF -DINSTALL_UDEV_RULES=OFF \
+      -DGR_PYTHON_DIR=/usr/lib/python3/dist-packages
+$ cmake --build build -j$(nproc)
+```
+
+- `CMAKE_INSTALL_PREFIX=/usr`: GNU Radio Companion and Python only find the blocks there without extra paths.
+- `GR_PYTHON_DIR`: without it the Python module goes to `/usr/lib/python3.12/site-packages`, which Ubuntu's Python
+  does not search, and `import gnuradio.limesuiteng` fails.
+- `INSTALL_UDEV_RULES=OFF` because `limesuiteng-udev` provides them; without that package use `ON`.
+- `BUILD_DRIVERS=OFF`: the PCIe kernel driver is not needed for USB boards.
+
+4. Install and check:
+
+```
+$ sudo cmake --install build
+$ sudo ldconfig
+$ limeDevice --full                                   # lists the board, firmware and gateware
+$ python3 -c "import gnuradio.limesuiteng; print('ok')"
+```
+
+5. Rebuild gps-sim against it (`make clean; make all LIMESDR=yes ...`) and check with `ldd gps-sim | grep lime`
+that it loads `/usr/lib/liblimesuiteng-legacyapi.so.1.0.0`.
+
+To update later: `git pull` (or check out another commit), run `cmake --build build` and the install again. To remove the
+installed files: `sudo xargs rm < build/install_manifest.txt && sudo ldconfig` (the manifest lists only the files of the
+last install).
+
+A quick TX check without gps-sim, sending zeros (only LO leakage), into a contained setup only:
+
+```
+$ head -c 12000000 /dev/zero > zeros.bin
+$ limeConfig --initialize --samplerate=3e6 --rxen=1 --rxlo=1575.42e6 --txen=1 --txlo=1575.42e6 --txpath=Band1 --txlpf=6e6
+$ limeTRX -i zeros.bin --looptx --time=5000 -l debug 2>&1 | grep -E "Tx0|rror"
+```
+
+A working TX shows `USB ep:03 Tx0: 9.0 MB/s` lines with `u:0` (no underruns) and a growing `dma:` count. The final
+`FPGA packet ingresed:` count stayed 0 on the tested Mini v1 even with TX working, so do not judge by it.
+
 #### Building under Linux with GCC
 
 ```
@@ -79,7 +151,9 @@ With HackRF support: `make all HACKRFSDR=yes` (depends on libhackrf)
 
 With ADLAM-PLUTO support: `make all PLUTOSDR=yes` (depends on libiio and libad9361-iio)
 
-Full SDR support: `make all HACKRFSDR=yes PLUTOSDR=yes`
+With LimeSDR support: `make all LIMESDR=yes` (depends on LimeSuiteNG built from source, see above). Tested with LimeSuiteNG commit 4032e99, LimeSDR Mini v1 (gateware 1.30): a Pixel 4 and a Samsung A33 lock at `-g 10` (Pixel from `-g 5`, 25-35 dB-Hz) over a cable with 60 dB of attenuation. The Mini runs from its VCTCXO (about 1.4 ppm off here); leave `-p` at 0, the simulator keeps code and carrier consistent with it.
+
+Full SDR support: `make all HACKRFSDR=yes PLUTOSDR=yes LIMESDR=yes`
 
 ### Online data sources
 
@@ -101,7 +175,7 @@ Options:
 --nav-file          -e  <filename> RINEX navigation file for GPS ephemeris (required)
 --geo-loc           -l  <location> Latitude, Longitude, Height (static mode) e.g. 35.681298,139.766247,10.0
 --start             -s  <date,time> Scenario start time YYYY/MM/DD,hh:mm:ss (use 'now' for actual time, an old nav file is shifted to it)
---gain              -g  <gain> Set TX gain, HackRF: 0-47dB, Pluto: -80-0dB (default 0)
+--gain              -g  <gain> Set TX gain, HackRF: 0-47dB, Pluto: -80-0dB, LimeSDR: 0-52dB (default 0)
 --duration          -d  <seconds> Duration in seconds
 --target            -t  <distance,bearing,height> Target distance [m], bearing [°] and height [m]
 --ppb               -p  <ppb> Set oscillator error in ppb (default 0)
@@ -126,6 +200,7 @@ SDR device types (use with --radio or -r option):
     iqfile
     hackrf
     plutosdr
+    limesdr
 ````
 
 ### Hardware test and practical notes
