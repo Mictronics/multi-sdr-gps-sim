@@ -128,6 +128,16 @@ int main(void) {
     expect("SF5 page 25 toa", field(4 + 24 * 2, 69, 8), 503808 / 4096);
     expect("SF5 page 25 WNa", field(4 + 24 * 2, 77, 8), 2445 % 256);
 
+    // Ephemeris values from RINEX are whole multiples of the LSB printed to ~13 digits: they must
+    // encode to the nearest step (G01 of the sample file; truncation was one step off for these)
+    static ephem_t g01;
+    g01.af0 = 1.258905977010E-04; g01.af1 = -8.071765478230E-12; g01.m0 = 1.055555253870E+00; g01.sqrta = 5.153735734940E+03;
+    eph2sbf(g01, io, al, sbf);
+    expect("eph af0 steps", (unsigned long) sfield(0, 271, 22), 270348);
+    expect("eph af1 steps", (unsigned long) sfield(0, 249, 16), (unsigned long) -71L);
+    expect("eph M0 steps", (field(1, 107, 8) << 24) | field(1, 121, 24), 721540918);
+    expect("eph sqrtA steps", (field(1, 227, 8) << 24) | field(1, 241, 24), 2702041801UL);
+
     // TOW in the HOW of the last frame of a week: subframe 4 announces 100799, subframe 5 the new week's 0
     static channel_t ch;
     eph2sbf(eph, io, al, ch.sbf);

@@ -537,25 +537,26 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
     toc = (unsigned long) (eph.toc.sec / 16.0);
     iode = (unsigned long) (eph.iode);
     iodc = (unsigned long) (eph.iodc);
-    deltan = (long) (eph.deltan / POW2_M43 / PI);
-    cuc = (long) (eph.cuc / POW2_M29);
-    cus = (long) (eph.cus / POW2_M29);
-    cic = (long) (eph.cic / POW2_M29);
-    cis = (long) (eph.cis / POW2_M29);
-    crc = (long) (eph.crc / POW2_M5);
-    crs = (long) (eph.crs / POW2_M5);
-    ecc = (unsigned long) (eph.ecc / POW2_M33);
-    sqrta = (unsigned long) (eph.sqrta / POW2_M19);
-    m0 = (long) (eph.m0 / POW2_M31 / PI);
-    omega0 = (long) (eph.omg0 / POW2_M31 / PI);
-    inc0 = (long) (eph.inc0 / POW2_M31 / PI);
-    aop = (long) (eph.aop / POW2_M31 / PI);
-    omegadot = (long) (eph.omgdot / POW2_M43 / PI);
-    idot = (long) (eph.idot / POW2_M43 / PI);
-    af0 = (long) (eph.af0 / POW2_M31);
-    af1 = (long) (eph.af1 / POW2_M43);
-    af2 = (long) (eph.af2 / POW2_M55);
-    tgd = (long) (eph.tgd / POW2_M31);
+    // Rounded: RINEX prints whole LSB multiples to ~13 digits, so a cast often lands one step low
+    deltan = (long) round(eph.deltan / POW2_M43 / PI);
+    cuc = (long) round(eph.cuc / POW2_M29);
+    cus = (long) round(eph.cus / POW2_M29);
+    cic = (long) round(eph.cic / POW2_M29);
+    cis = (long) round(eph.cis / POW2_M29);
+    crc = (long) round(eph.crc / POW2_M5);
+    crs = (long) round(eph.crs / POW2_M5);
+    ecc = (unsigned long) round(eph.ecc / POW2_M33);
+    sqrta = (unsigned long) round(eph.sqrta / POW2_M19);
+    m0 = (long) round(eph.m0 / POW2_M31 / PI);
+    omega0 = (long) round(eph.omg0 / POW2_M31 / PI);
+    inc0 = (long) round(eph.inc0 / POW2_M31 / PI);
+    aop = (long) round(eph.aop / POW2_M31 / PI);
+    omegadot = (long) round(eph.omgdot / POW2_M43 / PI);
+    idot = (long) round(eph.idot / POW2_M43 / PI);
+    af0 = (long) round(eph.af0 / POW2_M31);
+    af1 = (long) round(eph.af1 / POW2_M43);
+    af2 = (long) round(eph.af2 / POW2_M55);
+    tgd = (long) round(eph.tgd / POW2_M31);
 
     alpha0 = (signed long) round(ionoutc.alpha0 / POW2_M30);
     alpha1 = (signed long) round(ionoutc.alpha1 / POW2_M27);
@@ -633,16 +634,16 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
 
         if (alm->sv[sv].valid != 0) {
             svId = (unsigned long) (sv + 1);
-            ecc = (unsigned long) (alm->sv[sv].e / POW2_M21);
+            ecc = (unsigned long) round(alm->sv[sv].e / POW2_M21);
             toa = (unsigned long) (alm->sv[sv].toa.sec / POW2_12);
-            delta_i = (signed long) (alm->sv[sv].delta_i / POW2_M19);
-            omegadot = (signed long) (alm->sv[sv].omegadot / POW2_M38);
-            sqrta = (unsigned long) (alm->sv[sv].sqrta / POW2_M11);
-            omega0 = (signed long) (alm->sv[sv].omega0 / POW2_M23);
-            aop = (signed long) (alm->sv[sv].aop / POW2_M23);
-            m0 = (signed long) (alm->sv[sv].m0 / POW2_M23);
-            af0 = (signed long) (alm->sv[sv].af0 / POW2_M20);
-            af1 = (signed long) (alm->sv[sv].af1 / POW2_M38);
+            delta_i = (signed long) round(alm->sv[sv].delta_i / POW2_M19);
+            omegadot = (signed long) round(alm->sv[sv].omegadot / POW2_M38);
+            sqrta = (unsigned long) round(alm->sv[sv].sqrta / POW2_M11);
+            omega0 = (signed long) round(alm->sv[sv].omega0 / POW2_M23);
+            aop = (signed long) round(alm->sv[sv].aop / POW2_M23);
+            m0 = (signed long) round(alm->sv[sv].m0 / POW2_M23);
+            af0 = (signed long) round(alm->sv[sv].af0 / POW2_M20);
+            af1 = (signed long) round(alm->sv[sv].af1 / POW2_M38);
 
             sbf[3 + i * 2][0] = 0x8B0000UL << 6; // Preamble for TLM
             sbf[3 + i * 2][1] = 0x4UL << 8; // Subframe ID for HOW
@@ -699,16 +700,16 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
 
         if (alm->sv[sv].svid != 0) {
             svId = (unsigned long) (sv + 1);
-            ecc = (unsigned long) (alm->sv[sv].e / POW2_M21);
+            ecc = (unsigned long) round(alm->sv[sv].e / POW2_M21);
             toa = (unsigned long) (alm->sv[sv].toa.sec / 4096.0);
-            delta_i = (signed long) (alm->sv[sv].delta_i / POW2_M19);
-            omegadot = (signed long) (alm->sv[sv].omegadot / POW2_M38);
-            sqrta = (unsigned long) (alm->sv[sv].sqrta / POW2_M11);
-            omega0 = (signed long) (alm->sv[sv].omega0 / POW2_M23);
-            aop = (signed long) (alm->sv[sv].aop / POW2_M23);
-            m0 = (signed long) (alm->sv[sv].m0 / POW2_M23);
-            af0 = (signed long) (alm->sv[sv].af0 / POW2_M20);
-            af1 = (signed long) (alm->sv[sv].af1 / POW2_M38);
+            delta_i = (signed long) round(alm->sv[sv].delta_i / POW2_M19);
+            omegadot = (signed long) round(alm->sv[sv].omegadot / POW2_M38);
+            sqrta = (unsigned long) round(alm->sv[sv].sqrta / POW2_M11);
+            omega0 = (signed long) round(alm->sv[sv].omega0 / POW2_M23);
+            aop = (signed long) round(alm->sv[sv].aop / POW2_M23);
+            m0 = (signed long) round(alm->sv[sv].m0 / POW2_M23);
+            af0 = (signed long) round(alm->sv[sv].af0 / POW2_M20);
+            af1 = (signed long) round(alm->sv[sv].af1 / POW2_M38);
 
             sbf[4 + i * 2][0] = 0x8B0000UL << 6; // Preamble
             sbf[4 + i * 2][1] = 0x5UL << 8; // Subframe ID
