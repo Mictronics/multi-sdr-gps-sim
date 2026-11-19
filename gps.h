@@ -178,7 +178,6 @@ typedef struct {
 typedef struct {
     gpstime_t g;
     double range; // pseudorange
-    double rate;
     double d; // geometric distance
     double azel[2];
     double iono_delay;

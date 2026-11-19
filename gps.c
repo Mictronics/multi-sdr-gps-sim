@@ -112,15 +112,6 @@ static double normVect(const double *x) {
     return (sqrt(x[0] * x[0] + x[1] * x[1] + x[2] * x[2]));
 }
 
-/* Compute dot-product of two vectors
- * x1 First multiplicand
- * x2 Second multiplicand
- * Dot-product of both multiplicands
- */
-static double dotProd(const double *x1, const double *x2) {
-    return (x1[0] * x2[0] + x1[1] * x2[1] + x1[2] * x2[2]);
-}
-
 /* Generate the C/A code sequence for a given Satellite Vehicle PRN
  * prn PRN number of the Satellite Vehicle
  * ca Caller-allocated integer array of 1023 bytes
@@ -1345,7 +1336,7 @@ static void computeRange(range_t *rho, ephem_t eph, ionoutc_t *ionoutc, gpstime_
     double pos[3], vel[3], clk[2];
     double los[3];
     double tau;
-    double range, rate;
+    double range;
     double xrot, yrot;
 
     double llh[3], neu[3];
@@ -1376,12 +1367,6 @@ static void computeRange(range_t *rho, ephem_t eph, ionoutc_t *ionoutc, gpstime_
 
     // Pseudorange.
     rho->range = range - SPEED_OF_LIGHT * clk[0];
-
-    // Relative velocity of SV and receiver.
-    rate = dotProd(vel, los) / range;
-
-    // Pseudorange rate.
-    rho->rate = rate; // - SPEED_OF_LIGHT*clk[1];
 
     // Time of application.
     rho->g = g;
@@ -1534,16 +1519,11 @@ static int checkSatVisibility(ephem_t eph, gpstime_t g, double *xyz, double elvM
     return (0); // Invisible
 }
 
-static int allocateChannel(channel_t *chan, almanac_gps_t *alm, ephem_t *eph, ionoutc_t ionoutc, gpstime_t grx, double *xyz, double elvMask) {
-    NOTUSED(elvMask);
+static int allocateChannel(channel_t *chan, almanac_gps_t *alm, ephem_t *eph, ionoutc_t ionoutc, gpstime_t grx, double *xyz) {
     int nsat = 0;
     int i, sv;
     double azel[2];
-
     range_t rho;
-    double ref[3] = {0.0};
-    double r_ref, r_xyz;
-    double phase_ini;
 
     for (sv = 0; sv < MAX_SAT; sv++) {
         if (checkSatVisibility(eph[sv], grx, xyz, 0.0, azel) == 1) {
@@ -1572,15 +1552,7 @@ static int allocateChannel(channel_t *chan, almanac_gps_t *alm, ephem_t *eph, io
                         // Initialize pseudorange
                         computeRange(&rho, eph[sv], &ionoutc, grx, xyz);
                         chan[i].rho0 = rho;
-
-                        // Initialize carrier phase
-                        r_xyz = rho.range;
-
-                        computeRange(&rho, eph[sv], &ionoutc, grx, ref);
-                        r_ref = rho.range;
-
-                        phase_ini = (2.0 * r_ref - r_xyz) / LAMBDA_L1;
-                        chan[i].carr_phase = phase_ini - floor(phase_ini);
+                        chan[i].carr_phase = 0.0; // Arbitrary: receivers track the phase from wherever it starts
                         // Done.
                         break;
                     }
@@ -2069,7 +2041,7 @@ static void initChannels(gps_ctx_t *c) {
         allocatedSat[sv] = -1;
 
     c->grx = incGpsTime(c->g0, 0.0);
-    allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[0], 0.0);
+    allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[0]);
     showChannels(c);
 
     for (int i = 0; i < 37; i++)
@@ -2242,7 +2214,7 @@ static void updateNavigation(gps_ctx_t *c, int iumd, const double *llh) {
         }
     }
 
-    allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[iumd], 0.0);
+    allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[iumd]);
 
     if (sim->show_verbose) {
         gps2date(&c->grx, &sim->start);
