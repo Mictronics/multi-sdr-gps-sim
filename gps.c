@@ -1749,7 +1749,6 @@ typedef struct {
     double ant_pat[37]; // Receiver antenna gain per 5 degree of boresight angle
     double (*xyz)[3]; // User position every 0.1 s
     int numd; // Number of positions
-    double tmat[3][3]; // ECEF to local north-east-up at the start position
     gpstime_t g0; // Scenario start
     gpstime_t grx; // Receiver time
     short *iq_buff; // 0.1 s of 16 bit IQ samples
@@ -1766,6 +1765,17 @@ static void showChannels(const gps_ctx_t *c) {
         }
     }
     gui_mvwprintw(LS_FIX, LS_ROW_NAV, LS_COL_INFO, "Nav: %02d satellites", row - LS_ROW_CHAN);
+}
+
+/* Move the ECEF position xyz by neu (north, east, up in metres) in its own local frame.
+ * A fixed frame would make straight travel leave the Earth's surface: 785 m up after 100 km. */
+static void addNeu(double *xyz, const double *neu) {
+    double llh[3], t[3][3];
+
+    xyz2llh(xyz, llh);
+    ltcmat(llh, t);
+    for (int k = 0; k < 3; k++)
+        xyz[k] += t[0][k] * neu[0] + t[1][k] * neu[1] + t[2][k] * neu[2];
 }
 
 /* Set the start position, or the target given with -t, as the user motion. */
@@ -1786,7 +1796,6 @@ static bool initUserPosition(gps_ctx_t *c) {
     llh[1] = sim->location.lon / R2D;
     llh[2] = sim->location.height;
     llh2xyz(llh, c->xyz[0]);
-    ltcmat(llh, c->tmat);
 
     if (!sim->target.valid) {
         // No target position given, use location
@@ -1798,9 +1807,7 @@ static bool initUserPosition(gps_ctx_t *c) {
         neu[0] = sim->target.distance * cos((sim->target.bearing / 1000) / R2D);
         neu[1] = sim->target.distance * sin((sim->target.bearing / 1000) / R2D);
         neu[2] = sim->target.height;
-        c->xyz[0][0] += c->tmat[0][0] * neu[0] + c->tmat[1][0] * neu[1] + c->tmat[2][0] * neu[2];
-        c->xyz[0][1] += c->tmat[0][1] * neu[0] + c->tmat[1][1] * neu[1] + c->tmat[2][1] * neu[2];
-        c->xyz[0][2] += c->tmat[0][2] * neu[0] + c->tmat[1][2] * neu[1] + c->tmat[2][2] * neu[2];
+        addNeu(c->xyz[0], neu);
     }
 
     for (int i = 1; i < c->numd; i++) {
@@ -2052,9 +2059,8 @@ static void moveUser(gps_ctx_t *c, int iumd) {
     neu[1] = (target->velocity * sin(dir)) * 0.1;
     neu[2] = target->vertical_speed * 0.1;
 
-    c->xyz[iumd][0] = c->xyz[iumd - 1][0] + (c->tmat[0][0] * neu[0] + c->tmat[1][0] * neu[1] + c->tmat[2][0] * neu[2]);
-    c->xyz[iumd][1] = c->xyz[iumd - 1][1] + (c->tmat[0][1] * neu[0] + c->tmat[1][1] * neu[1] + c->tmat[2][1] * neu[2]);
-    c->xyz[iumd][2] = c->xyz[iumd - 1][2] + (c->tmat[0][2] * neu[0] + c->tmat[1][2] * neu[1] + c->tmat[2][2] * neu[2]);
+    memcpy(c->xyz[iumd], c->xyz[iumd - 1], sizeof (c->xyz[iumd]));
+    addNeu(c->xyz[iumd], neu);
 }
 
 /* Update range, code phase and signal gain of every channel for the next 0.1 s. */
