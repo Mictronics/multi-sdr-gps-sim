@@ -163,6 +163,7 @@ void fifo_enqueue(struct iq_buf *buf) {
         pthread_cond_signal(&fifo_notempty_cond);
     } else {
         fifo_tail->next = buf;
+        fifo_tail = buf;
     }
 
 done:

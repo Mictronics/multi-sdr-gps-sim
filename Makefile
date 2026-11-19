@@ -37,7 +37,7 @@ gps-sim: fifo.o almanac.o gps.o gui.o sdr.o gps-sim.o $(SDR_OBJ)
 	$(CC) -g -o $@ $^ $(LDFLAGS) $(LIBS) $(LIBS_SDR)
 
 # Unit tests, they need no SDR or terminal; gui and thread calls are stubbed.
-TEST_BINS = tests/test_nav tests/test_rinex
+TEST_BINS = tests/test_nav tests/test_rinex tests/test_fifo
 TEST_COMMON = tests/stubs.o gps.o almanac.o fifo.o
 
 tests/test_%: tests/test_%.o $(TEST_COMMON)
