@@ -145,6 +145,11 @@ int sdr_pluto_init(simulator_t *simulator) {
         ctx = iio_create_context_from_uri(simulator->pluto_uri);
     } else {
         ctx = iio_create_default_context();
+        // A PC's local context has its own IIO devices (sensors) but no Pluto
+        if (ctx != NULL && iio_context_find_device(ctx, "cf-ad9361-dds-core-lpc") == NULL) {
+            iio_context_destroy(ctx);
+            ctx = NULL;
+        }
         if (ctx == NULL) {
             ctx = iio_create_network_context("pluto.local");
         }
