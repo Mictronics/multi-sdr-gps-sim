@@ -101,19 +101,8 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             break;
         case 's':
             if (strncmp(arg, "now", 3) == 0) {
-                simulator.time_overwrite = true;
-                time_t timer;
-                struct tm *gmt;
-
-                time(&timer);
-                gmt = gmtime(&timer);
-
-                simulator.start.y = gmt->tm_year + 1900;
-                simulator.start.m = gmt->tm_mon + 1;
-                simulator.start.d = gmt->tm_mday;
-                simulator.start.hh = gmt->tm_hour;
-                simulator.start.mm = gmt->tm_min;
-                simulator.start.sec = (double) gmt->tm_sec;
+                simulator.time_overwrite = true; // The GPS thread reads the clock when it starts
+                break;
             } else {
                 if (sscanf(arg, "%d/%d/%d,%d:%d:%lf", &simulator.start.y, &simulator.start.m, &simulator.start.d, &simulator.start.hh, &simulator.start.mm, &simulator.start.sec) != 6) {
                     argp_error(state, "Invalid start time '%s', expected YYYY/MM/DD,hh:mm:ss.", arg);

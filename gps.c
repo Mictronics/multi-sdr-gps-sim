@@ -1894,10 +1894,19 @@ static bool selectStartTime(gps_ctx_t *c) {
     gpstime_t gmin = {0, 0.0}, gmax = {0, 0.0};
     gpstime_t gtmp;
 
+    if (sim->time_overwrite) { // -s now: read the clock here, after the download
+        time_t now = time(NULL);
+        struct tm tm;
+        gmtime_r(&now, &tm);
+        sim->start = (datetime_t) {tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, (double) tm.tm_sec};
+    }
+
     c->g0.week = -1; // Invalid start time
     if (sim->start.m >= 1) { // Zero month means no -s given
         date2gps(&sim->start, &c->g0);
     }
+    if (sim->time_overwrite) // The clock gives UTC; GPS time is ahead by the leap seconds
+        c->g0 = incGpsTime(c->g0, (c->ionoutc.have & 0x8) ? c->ionoutc.dtls : LEAP_DEFAULT_DTLS);
 
     // Earliest and latest clock time of the file
     gmin = gmax = c->table.rec[0].toc;
