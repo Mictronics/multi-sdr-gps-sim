@@ -14,7 +14,7 @@ Flat Makefile, C11, no linter. `make test` runs two unit tests, linked against `
 
 Objects track header dependencies (`-MMD`) and are rebuilt when `HACKRFSDR`, `PLUTOSDR` or `OPT` change (`.build-flags`). The default is `-O2`; use `make OPT=-O0` for debugging.
 
-Run example: `./gps-sim -f -s now -l 48.0,10.0,500 -r iqfile` (downloads current data; with your own files use `-e nav.gz` instead of `-f`) (see README for all options; `help.h` holds the usage text). `-r` selects the SDR backend (`none|iqfile|hackrf|plutosdr`). Nav files may be gzipped RINEX 2 or 3 (`-3`). `-f` downloads the nav file (NOAA CORS for RINEX 2, BKG for RINEX 3) and the Celestrak almanac over HTTPS instead.
+Run example: `./gps-sim -f -s now -l 48.0,10.0,500 -r iqfile` (downloads current data; with your own files use `-e nav.gz` instead of `-f`) (see README for all options; `help.h` holds the usage text). `-r` selects the SDR backend (`none|iqfile|hackrf|plutosdr`). Nav files may be gzipped RINEX 2 or 3 (`-3`). `-f` downloads the nav file (NOAA CORS for RINEX 2, BKG for RINEX 3; with `-s now` a NOAA file that lags behind the start time is replaced by BKG's file of the day) and the Celestrak almanac over HTTPS instead.
 
 The program needs a terminal of at least 120x26 and writes `iqdata.bin` in the working directory with `-r iqfile`. Without `-f` the almanac is read from `almanac.sem` in the working directory; one more than 4 weeks away from the scenario time is rejected, so use `--disable-almanac` with old nav files.
 

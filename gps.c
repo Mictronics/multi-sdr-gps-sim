@@ -1643,23 +1643,24 @@ static bool is_connect_error(CURLcode res) {
 }
 
 /* Download the newest available broadcast ephemeris file, trying each source in turn.
- * RINEX 2: NOAA CORS daily GPS file, refreshed about hourly, so today's file is tried first.
- * RINEX 3: IGS daily merged file from BKG, published the morning after the day ends.
+ * RINEX 2: NOAA CORS daily GPS file, refreshed about hourly, but its records can lag hours behind.
+ * RINEX 3: BKG merged files; today's BRDC00WRD_S is built from real-time streams and reaches the
+ * current hour, BRDC00IGS_R only appears the day after. Today's file is tried first for both.
  */
 static CURLcode download_nav_file(bool rinex3, const char *filename, const atomic_bool *cancel) {
-    static const char *const rinex3_names[] = {"BRDC00IGS_R", "BRDC00WRD_R"};
+    static const char *const rinex3_names[] = {"BRDC00WRD_S", "BRDC00WRD_R", "BRDC00IGS_R"};
     CURLcode res = CURLE_FAILED_INIT;
     char url[256];
     time_t now = time(NULL);
 
-    for (int back = rinex3 ? 1 : 0; back <= (rinex3 ? 3 : 2); back++) {
+    for (int back = 0; back <= (rinex3 ? 3 : 2); back++) {
         time_t t = now - back * 86400;
         struct tm tm;
         gmtime_r(&t, &tm);
         int year = tm.tm_year + 1900;
         int doy = tm.tm_yday + 1;
 
-        for (int n = 0; n < (rinex3 ? 2 : 1); n++) {
+        for (int n = 0; n < (rinex3 ? 3 : 1); n++) {
             if (rinex3) {
                 snprintf(url, sizeof (url), "https://igs.bkg.bund.de/root_ftp/IGS/BRDC/%04d/%03d/%s_%04d%03d0000_01D_MN.rnx.gz",
                         year, doy, rinex3_names[n], year, doy);
@@ -1886,6 +1887,17 @@ static bool loadMotionFile(gps_ctx_t *c) {
     return true;
 }
 
+/* Number of satellites with a record within EPH_MAX_AGE of g. */
+static int countCovered(const eph_table_t *tab, gpstime_t g) {
+    ephem_t eph[MAX_SAT];
+    int n = 0;
+
+    ephSelect(tab, g, eph);
+    for (int sv = 0; sv < MAX_SAT; sv++)
+        n += eph[sv].vflg ? 1 : 0;
+    return n;
+}
+
 /* Set the scenario start time g0, shifting the ephemeris to it for -s now. */
 static bool selectStartTime(gps_ctx_t *c) {
     simulator_t *sim = c->sim;
@@ -1908,6 +1920,23 @@ static bool selectStartTime(gps_ctx_t *c) {
     if (sim->time_overwrite) // The clock gives UTC; GPS time is ahead by the leap seconds
         c->g0 = incGpsTime(c->g0, (c->ionoutc.have & 0x8) ? c->ionoutc.dtls : LEAP_DEFAULT_DTLS);
 
+    // The NOAA file can lag hours behind; BKG's file of the day reaches the current hour
+    if (sim->time_overwrite && sim->use_ftp && !sim->use_rinex3 && countCovered(&c->table, c->g0) < COVER_MIN_SATS) {
+        gui_status_wprintw(YELLOW, "RINEX v2 file does not reach the start time, trying RINEX v3.\n");
+        eph_table_t t3;
+        ionoutc_t io3 = c->ionoutc;
+        if (download_nav_file(true, RINEX3_FILE_NAME, &sim->main_exit) == CURLE_OK &&
+                readRinex(&t3, &io3, RINEX3_FILE_NAME, true) > 0) {
+            if (countCovered(&t3, c->g0) > countCovered(&c->table, c->g0)) {
+                free(c->table.rec);
+                c->table = t3;
+                c->ionoutc = io3;
+            } else {
+                free(t3.rec);
+            }
+        }
+    }
+
     // Earliest and latest clock time of the file
     gmin = gmax = c->table.rec[0].toc;
     tmin = tmax = c->table.rec[0].t;
@@ -1927,15 +1956,11 @@ static bool selectStartTime(gps_ctx_t *c) {
         if (sim->time_overwrite == true) {
             // Shifting moves the satellites away from where the real almanac puts them, so it is
             // only done for data that does not reach the start time (e.g. an old nav file)
-            ephSelect(&c->table, c->g0, c->eph);
-            int covered = 0;
-            for (int sv = 0; sv < MAX_SAT; sv++)
-                covered += c->eph[sv].vflg ? 1 : 0;
-
-            if (covered >= COVER_MIN_SATS) {
+            if (countCovered(&c->table, c->g0) >= COVER_MIN_SATS) {
                 gui_status_wprintw(GREEN, "Ephemeris covers the start time, used as it is.\n");
             } else {
-                gui_status_wprintw(YELLOW, "Ephemeris does not reach the start time, shifting it.\n");
+                gui_status_wprintw(RED, "Ephemeris does not reach the start time, shifting it: it no longer matches the\n"
+                        "almanac and receivers may distrust it (use --disable-almanac).\n");
                 gtmp.week = c->g0.week;
                 gtmp.sec = (double) (((int) (c->g0.sec)) / 7200)*7200.0;
 

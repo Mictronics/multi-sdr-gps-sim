@@ -85,8 +85,8 @@ Full SDR support: `make all HACKRFSDR=yes PLUTOSDR=yes`
 
 With `-f` the program downloads the ephemeris and almanac over HTTPS, no login needed:
 
-- RINEX 2 (default): daily GPS broadcast file from the NOAA CORS public bucket (`noaa-cors-pds`), updated about hourly.
-- RINEX 3 (`-3`): IGS daily merged broadcast file from BKG (`igs.bkg.bund.de`), published the morning after the day ends.
+- RINEX 2 (default): daily GPS broadcast file from the NOAA CORS public bucket (`noaa-cors-pds`), updated about hourly, though its records can lag several hours behind. With `-s now`, a file that does not reach the start time is replaced by the RINEX 3 file below.
+- RINEX 3 (`-3`): merged broadcast file of the day from BKG (`igs.bkg.bund.de`): `BRDC00WRD_S`, built from real-time streams and reaching the current hour, then `BRDC00WRD_R`, then the previous days' files.
 - Almanac: current SEM almanac from Celestrak (`celestrak.org`).
 
 The files are saved as `rinex2.gz`, `rinex3.gz` and `almanac.sem` in the working directory.
