@@ -11,6 +11,7 @@
  */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -56,8 +57,13 @@ static void *pluto_tx_thread_ep(void *arg) {
         // Get a fifo block
         struct iq_buf *iq = fifo_dequeue();
         if (iq != NULL && iq->data16 != NULL) {
-            // Fifo has transfer block size
-            memcpy(ptx_buffer, iq->data16, iq->validLength * sizeof (signed short));
+            // The AD9361 DAC takes 12 bit samples in the upper bits of each 16 bit word
+            int16_t *dst = (int16_t *) ptx_buffer;
+            for (unsigned k = 0; k < iq->validLength; k++) {
+                int v = iq->data16[k];
+                v = v > 2047 ? 2047 : (v < -2048 ? -2048 : v);
+                dst[k] = (int16_t) (v * 16);
+            }
             // Schedule TX buffer, iio_buffer_push will block if there is no room to push to.
             ntx = iio_buffer_push(tx_buffer);
             if (ntx < 0) {

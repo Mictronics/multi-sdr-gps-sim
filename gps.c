@@ -2116,12 +2116,6 @@ static void updateChannels(gps_ctx_t *c, int iumd) {
             // Receiver antenna gain by boresight angle
             int ibs = (int) ((90.0 - rho.azel[1] * R2D) / 5.0);
             c->gain[i] = path_loss * c->ant_pat[ibs];
-
-            // Pluto SDR needs more signal strength due to its 12 bit DAC range,
-            // otherwise the signal dynamic range is very low. Best value to be defined.
-            if (c->sim->sdr_type == SDR_PLUTOSDR) {
-                c->gain[i] *= 2;
-            }
         }
     }
 }
