@@ -2195,14 +2195,8 @@ static bool sameEphemeris(const ephem_t *a, const ephem_t *b) {
 static void updateNavigation(gps_ctx_t *c, int iumd, const double *llh) {
     simulator_t *sim = c->sim;
 
-    for (int i = 0; i < MAX_CHAN; i++) {
-        if (c->chan[i].prn > 0) {
-            generateNavMsg(c->grx, &c->chan[i], 0);
-        }
-    }
-
-    // Use the record closest in time for every satellite; allocated ones that got a newer
-    // record also get new subframes, sent from the next frame on
+    // Use the record closest in time for every satellite. Its subframes go into the frame that
+    // starts now, because the ranges follow the new record from now on too.
     ephem_t next[MAX_SAT];
     ephSelect(&c->table, c->grx, next);
     for (int i = 0; i < MAX_CHAN; i++) {
@@ -2211,6 +2205,12 @@ static void updateNavigation(gps_ctx_t *c, int iumd, const double *llh) {
             eph2sbf(next[sv], c->ionoutc, c->alm, c->chan[i].sbf);
     }
     memcpy(c->eph, next, sizeof (next));
+
+    for (int i = 0; i < MAX_CHAN; i++) {
+        if (c->chan[i].prn > 0) {
+            generateNavMsg(c->grx, &c->chan[i], 0);
+        }
+    }
 
     allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[iumd], 0.0);
 
