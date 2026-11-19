@@ -23,7 +23,7 @@ static struct argp_option options[] = {
     {"use-ftp", 'f', 0, 0, "Pull actual RINEX navigation file and almanac from online source", 1},
     {"geo-loc", 'l', "location", 0, "Latitude, Longitude, Height (static mode) e.g. 35.681298,139.766247,10.0", 1},
     {"start", 's', "date,time", 0, "Scenario start time YYYY/MM/DD,hh:mm:ss (use 'now' for actual time, an old nav file is shifted to it)", 1},
-    {"disable-iono", 'I', 0, 0, "Disable ionospheric delay for spacecraft scenario", 1},
+    {"disable-iono", 'I', 0, 0, "Disable ionospheric and tropospheric delay for spacecraft scenario", 1},
     {"verbose", 'v', 0, 0, "Show verbose output and details about simulated channels", 1},
     {"interactive", 'i', 0, 0, "Use interactive mode", 1},
     {"amplifier", 'a', 0, 0, "Enable TX amplifier (default OFF)", 1},

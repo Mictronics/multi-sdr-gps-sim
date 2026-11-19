@@ -1316,6 +1316,25 @@ static double ionosphericDelay(const ionoutc_t *ionoutc, gpstime_t g, double *ll
     return (iono_delay);
 }
 
+/* Troposphere delay in metres: Saastamoinen model with a standard atmosphere (15 C and
+ * 1013.25 hPa at sea level, 70 % humidity), as in RTKLIB, which phones' models are close to.
+ * llh Receiver latitude, longitude (rad) and height (m); 0 above 10 km or for el <= 0
+ */
+double tropoDelay(const double *llh, const double *azel) {
+    if (llh[2] < -100.0 || llh[2] > 1.0e4 || azel[1] <= 0.0)
+        return 0.0;
+
+    double h = llh[2] < 0.0 ? 0.0 : llh[2];
+    double pres = 1013.25 * pow(1.0 - 2.2557e-5 * h, 5.2568); // hPa
+    double temp = 15.0 - 6.5e-3 * h + 273.16; // K
+    double e = 6.108 * 0.7 * exp((17.15 * temp - 4684.0) / (temp - 38.45)); // Water vapour pressure, hPa
+    double cosz = cos(PI / 2.0 - azel[1]);
+
+    double dry = 0.0022768 * pres / (1.0 - 0.00266 * cos(2.0 * llh[0]) - 0.00028 * h / 1e3) / cosz;
+    double wet = 0.002277 * (1255.0 / temp + 0.05) * e / cosz;
+    return dry + wet;
+}
+
 /* Compute range between a satellite and the receiver
  * rho The computed range
  * eph Ephemeris data of the satellite
@@ -1373,9 +1392,10 @@ static void computeRange(range_t *rho, ephem_t eph, ionoutc_t *ionoutc, gpstime_
     ecef2neu(los, tmat, neu);
     neu2azel(rho->azel, neu);
 
-    // Add ionospheric delay
     rho->iono_delay = ionosphericDelay(ionoutc, g, llh, rho->azel);
     rho->range += rho->iono_delay;
+    if (ionoutc->enable) // --disable-iono switches off both atmosphere delays
+        rho->range += tropoDelay(llh, rho->azel);
 }
 
 /* Compute the code phase for a given channel (satellite)

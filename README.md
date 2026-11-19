@@ -110,7 +110,7 @@ Options:
 --network           -N  <network> ADLAM-Pluto network IP or hostname (default pluto.local)
 --motion            -m  <name> User motion file (dynamic mode)
 --iq16                  Set IQ sample size to 16 bit (default 8 bit)
---disable-iono      -I  Disable ionospheric delay for spacecraft scenario
+--disable-iono      -I  Disable ionospheric and tropospheric delay for spacecraft scenario
 --verbose           -v  Show verbose output and details about simulated channels
 --interactive       -i  Use interactive mode
 --amplifier         -a  Enable TX amplifier (default OFF)
@@ -130,7 +130,7 @@ SDR device types (use with --radio or -r option):
 
 ### Hardware test and practical notes
 
-Tested with a HackRF One (firmware 2026.01.3) at 3 MS/s, TX gain 14 dB, amplifier off, the output going through a cable with 60 dB of attenuation to a Pixel 4 phone. All simulated satellites were tracked at 30 to 45 dB-Hz, the phone locked within a minute with almanac, ephemeris and "used in fix" flags on every satellite, reported the commanded position to about 1.3 m horizontally and the correct time. Its height was about 15 m low: the simulator only models a simple ionosphere delay and no troposphere, and phones apply their own models.
+Tested with a HackRF One (firmware 2026.01.3) at 3 MS/s, TX gain 14 dB, amplifier off, the output going through a cable with 60 dB of attenuation to a Pixel 4 phone. All simulated satellites were tracked at 30 to 45 dB-Hz, the phone locked within a minute with almanac, ephemeris and "used in fix" flags on every satellite, reported the commanded position to about 1.3 m horizontally and the correct time. Its height was about 15 m low: the simulator then modelled no troposphere while phones correct for one (a troposphere delay has been added since).
 
 ```
 mkdir -p ~/gps-tx && cd ~/gps-tx
