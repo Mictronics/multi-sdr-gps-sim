@@ -602,14 +602,15 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
     sbf[2][8] = (omegadot & 0xFFFFFFUL) << 6;
     sbf[2][9] = ((iode & 0xFFUL) << 22) | ((idot & 0x3FFFUL) << 8);
 
-    // Empty all the pages of subframes 4 and 5: dummy SV 0 with alternating bits
+    // Empty all the pages of subframes 4 and 5: alternating bits under the page's SV ID
+    // (IS-GPS-200 Table 20-V, 0 = dummy SV for a missing almanac)
     for (i = 0; i < 25; i++) {
         for (int sf = 4; sf <= 5; sf++) {
             unsigned long *page = sbf[sf - 1 + i * 2];
 
             page[0] = 0x8B0000UL << 6; // Preamble for TLM
             page[1] = (unsigned long) sf << 8; // Subframe ID for HOW
-            page[2] = (dataId << 28) | ((EMPTY_WORD & 0xFFFFUL) << 6);
+            page[2] = (dataId << 28) | ((sf == 4 ? sbf4_svId[i] : sbf5_svId[i]) << 22) | ((EMPTY_WORD & 0xFFFFUL) << 6);
             for (int w = 3; w < 9; w++)
                 page[w] = (EMPTY_WORD & 0xFFFFFFUL) << 6;
             page[9] = (EMPTY_WORD & 0x3FFFFFUL) << 8;

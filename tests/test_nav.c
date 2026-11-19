@@ -92,6 +92,13 @@ int main(void) {
         int b = sv < 4 ? 69 + 4 * sv : 91 + 30 * ((sv - 4) / 6) + 4 * ((sv - 4) % 6);
         expect(w, field(3 + 24 * 2, b, 4), (sv == 12 || sv == 28) ? 0 : 1);
     }
+    // SV IDs of the reserved subframe 4 pages, IS-GPS-200 Table 20-V (page number: SV ID)
+    static const int reserved[][2] = {{1, 57}, {6, 57}, {11, 57}, {12, 62}, {13, 52}, {14, 53}, {15, 54}, {16, 57},
+        {17, 55}, {19, 58}, {20, 59}, {21, 57}, {22, 60}, {23, 61}, {24, 62}};
+    for (unsigned k = 0; k < sizeof reserved / sizeof reserved[0]; k++) {
+        char w[40]; snprintf(w, sizeof w, "SF4 page %d SV id", reserved[k][0]);
+        expect(w, field(3 + (reserved[k][0] - 1) * 2, 63, 6), (unsigned long) reserved[k][1]);
+    }
     // Per page 8 bit almanac health: PRN5 is SF5 page 5, PRN26 is SF4 page 3 (index 2)
     expect("SF5 page PRN5 health", field(4 + 4 * 2, 137, 8), health[4]);
     expect("SF4 page PRN26 health", field(3 + 2 * 2, 137, 8), health[25]);
