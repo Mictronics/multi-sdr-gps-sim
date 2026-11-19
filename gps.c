@@ -1435,13 +1435,15 @@ void generateNavMsg(gpstime_t g, channel_t *chan, int init) {
 
     wn = (unsigned long) (g0.week % 1024);
     tow = ((unsigned long) g0.sec) / 6UL;
+    // All satellites send the same subframe 4/5 page: the frame count of the week modulo 25
+    int ipage = (int) ((tow / 5UL) % 25UL);
 
     // Initialize the subframe 5
     if (init == 1) {
         prevwrd = 0UL;
 
         for (iwrd = 0; iwrd < N_DWRD_SBF; iwrd++) {
-            sbfwrd = chan->sbf[4 + chan->ipage * 2][iwrd];
+            sbfwrd = chan->sbf[4 + ((ipage + 24) % 25) * 2][iwrd]; // Previous frame's page
 
             // Add TOW-count message into HOW
             if (iwrd == 1)
@@ -1470,9 +1472,9 @@ void generateNavMsg(gpstime_t g, channel_t *chan, int init) {
             if (isbf < 3) // Subframes 1-3
                 sbfwrd = chan->sbf[isbf][iwrd];
             else if (isbf == 3) // Subframe 4
-                sbfwrd = chan->sbf[3 + chan->ipage * 2][iwrd];
+                sbfwrd = chan->sbf[3 + ipage * 2][iwrd];
             else // Subframe 5 
-                sbfwrd = chan->sbf[4 + chan->ipage * 2][iwrd];
+                sbfwrd = chan->sbf[4 + ipage * 2][iwrd];
 
             // Add transmission week number to Subframe 1
             if ((isbf == 0)&&(iwrd == 2))
@@ -1490,11 +1492,6 @@ void generateNavMsg(gpstime_t g, channel_t *chan, int init) {
             prevwrd = chan->dwrd[(isbf + 1) * N_DWRD_SBF + iwrd];
         }
     }
-
-    // Move to the next pages
-    chan->ipage++;
-    if (chan->ipage >= 25)
-        chan->ipage = 0;
 }
 
 static int checkSatVisibility(ephem_t eph, gpstime_t g, double *xyz, double elvMask, double *azel) {
@@ -1536,7 +1533,6 @@ static int allocateChannel(channel_t *chan, almanac_gps_t *alm, ephem_t *eph, io
                     if (chan[i].prn == 0) {
                         // Initialize channel
                         chan[i].prn = sv + 1;
-                        chan[i].ipage = 0;
                         chan[i].azel[0] = azel[0];
                         chan[i].azel[1] = azel[1];
 

@@ -149,6 +149,18 @@ int main(void) {
         expect(s == 4 ? "week end SF4 TOW" : "week end SF5 TOW", (how >> 13) & 0x1FFFFUL, s == 4 ? 100799 : 0);
     }
 
+    // Almanac page by time: the frame at 120 s is frame 4 of the week, so subframe 5 carries page 5
+    // (PRN 5); the previous frame's subframe 5 (page 4, PRN 4 has no almanac here) is a dummy
+    static channel_t pc;
+    eph2sbf(eph, io, al, pc.sbf);
+    generateNavMsg((gpstime_t) {2445, 120.0}, &pc, 1);
+    for (int s = 0; s <= 5; s += 5) {
+        unsigned long w3 = pc.dwrd[s * N_DWRD_SBF + 2];
+        if (pc.dwrd[s * N_DWRD_SBF + 1] & 1UL)
+            w3 ^= 0x3FFFFFC0UL;
+        expect(s ? "frame 4 SF5 SV id" : "frame 3 SF5 SV id", (w3 >> 22) & 0x3FUL, s ? 5 : 0);
+    }
+
     printf(failures ? "%d FAILURES\n" : "all checks passed\n", failures);
     return failures != 0;
 }

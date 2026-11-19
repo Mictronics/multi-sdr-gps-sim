@@ -194,7 +194,6 @@ typedef struct {
     gpstime_t g0; /* GPS time at start */
 	unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF]; /*!< current subframe */
 	unsigned long dwrd[N_DWRD]; /*!< Data words of sub-frame */
-	int ipage;
     int iword; /* initial word */
     int ibit; /* initial bit */
     int icode; /* initial code */
