@@ -685,6 +685,15 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
         }
     }
 
+    // SV configuration, 4 bits per PRN from page bit 69 on (PRN 1-4 in word 3, then 6 per word).
+    // 0001: A-S off as in our HOW, Block II; 0000 is a reserved type receivers may reject.
+    for (sv = 0; sv < MAX_SAT; sv++) {
+        if (alm->sv[sv].valid != 0) {
+            int b = sv < 4 ? 69 + 4 * sv : 91 + 30 * ((sv - 4) / 6) + 4 * ((sv - 4) % 6); // 1-based page bit
+            sbf[3 + 24 * 2][(b - 1) / 30] |= 0x1UL << (26 - (b - 1) % 30);
+        }
+    }
+
     // Subframe 5, page 1-24: almanac data for PRN 1 through 24
     for (sv = 0; sv < 24; sv++) {
         i = sv;

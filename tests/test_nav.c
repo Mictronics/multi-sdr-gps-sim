@@ -86,6 +86,12 @@ int main(void) {
         char w[40]; snprintf(w, sizeof w, "SF4 p25 health PRN%d", 25 + k);
         expect(w, field(3 + 24 * 2, sf4[k], 6), (24 + k == 28) ? 0 : health[24 + k]);
     }
+    // SF4 page 25 SV configuration: 4 bits per PRN at bits 69-84 (PRN 1-4), then 6 per word from bit 91
+    for (int sv = 0; sv < MAX_SAT; sv++) {
+        char w[40]; snprintf(w, sizeof w, "SF4 p25 config PRN%d", sv + 1);
+        int b = sv < 4 ? 69 + 4 * sv : 91 + 30 * ((sv - 4) / 6) + 4 * ((sv - 4) % 6);
+        expect(w, field(3 + 24 * 2, b, 4), (sv == 12 || sv == 28) ? 0 : 1);
+    }
     // Per page 8 bit almanac health: PRN5 is SF5 page 5, PRN26 is SF4 page 3 (index 2)
     expect("SF5 page PRN5 health", field(4 + 4 * 2, 137, 8), health[4]);
     expect("SF4 page PRN26 health", field(3 + 2 * 2, 137, 8), health[25]);
