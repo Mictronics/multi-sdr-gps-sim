@@ -5,7 +5,7 @@
  * This file is part of the Github project at
  * https://github.com/mictronics/multi-sdr-gps-sim.git
  *
- * Copyright © 2021 Mictronics
+ * Copyright © 2026 Mictronics
  * Distributed under the MIT License.
  *
  */
@@ -29,7 +29,7 @@
  *  896000000    224000000    112000000    56000000    28000000    7000000
  *  960000000    240000000    120000000    60000000    30000000    7500000
  * 1024000000    256000000    128000000    64000000    32000000    8000000
- * etc. 
+ * etc.
  * Any sample rate being a multiple of 250kHz can be generated with integer dividers.
  */
 
@@ -45,4 +45,3 @@ int sdr_pluto_run(void);
 int sdr_pluto_set_gain(const int gain);
 
 #endif /* SDR_PLUTO_H */
-

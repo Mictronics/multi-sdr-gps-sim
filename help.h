@@ -5,7 +5,7 @@
  * This file is part of the Github project at
  * https://github.com/mictronics/multi-sdr-gps-sim.git
  *
- * Copyright © 2021 Mictronics
+ * Copyright © 2026 Mictronics
  * Distributed under the MIT License.
  *
  */
@@ -41,7 +41,7 @@ static struct argp_option options[] = {
     {0, 0, 0, 0, "SDR device types (use with --radio or -r option):", 3},
     {0, 0, 0, OPTION_DOC, "   none", 3},
     {0, 0, 0, OPTION_DOC, "   iqfile", 3},
-#ifdef ENABLE_HACKRFSDR    
+#ifdef ENABLE_HACKRFSDR
     {0, 0, 0, OPTION_DOC, "   hackrf", 3},
 #endif
 #ifdef ENABLE_PLUTOSDR
@@ -49,9 +49,7 @@ static struct argp_option options[] = {
 #endif
 #ifdef ENABLE_LIMESDR
     {0, 0, 0, OPTION_DOC, "   limesdr", 3},
-#endif    
-    { 0}
-};
+#endif
+    {0}};
 
 #endif /* HELP_H */
-

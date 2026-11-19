@@ -5,7 +5,7 @@
  * This file is part of the Github project at
  * https://github.com/mictronics/multi-sdr-gps-sim.git
  *
- * Copyright © 2021 Mictronics
+ * Copyright © 2026 Mictronics
  * Distributed under the MIT License.
  *
  */
@@ -23,8 +23,9 @@
 #define TX_FREQUENCY 1575420000
 
 /* TX frequency corrected for an oscillator running ppb parts per billion fast */
-static inline uint64_t sdr_corrected_frequency(int ppb) {
-    return (uint64_t) ((double) TX_FREQUENCY * (1.0 - ppb * 1e-9) + 0.5);
+static inline uint64_t sdr_corrected_frequency(int ppb)
+{
+    return (uint64_t)((double)TX_FREQUENCY * (1.0 - ppb * 1e-9) + 0.5);
 }
 #define FREQ_ONE_MHZ (1000000ull)
 // 3 MHz is generated in Pluto SDR with integer dividers being multiple of 2
@@ -49,4 +50,3 @@ int sdr_run(void);
 int sdr_set_gain(int gain);
 
 #endif /* SDR_H */
-

@@ -5,7 +5,7 @@
  * This file is part of the Github project at
  * https://github.com/mictronics/multi-sdr-gps-sim.git
  *
- * Copyright © 2021 Mictronics
+ * Copyright © 2026 Mictronics
  * Distributed under the MIT License.
  *
  */
@@ -45,9 +45,9 @@
 #define N_DWRD_SBF (10) // 10 word per subframe
 
 /* Number of words */
-#define N_DWRD ((N_SBF+1)*N_DWRD_SBF) // Subframe word buffer size
+#define N_DWRD ((N_SBF + 1) * N_DWRD_SBF) // Subframe word buffer size
 
-#define N_SBF_PAGE (3+2*25) // Subframes 1 to 3 and 25 pages of subframes 4 and 5
+#define N_SBF_PAGE (3 + 2 * 25) // Subframes 1 to 3 and 25 pages of subframes 4 and 5
 
 /* C/A code sequence length */
 #define CA_SEQ_LEN (1023)
@@ -58,7 +58,7 @@
 #define SECONDS_IN_HOUR 3600.0
 #define SECONDS_IN_MINUTE 60.0
 
-#define POW2_M5  0.03125
+#define POW2_M5 0.03125
 #define POW2_M19 1.907348632812500e-6
 #define POW2_M29 1.862645149230957e-9
 #define POW2_M31 4.656612873077393e-10
@@ -72,7 +72,7 @@
 #define POW2_M24 5.960464477539063e-008
 
 #define POW2_M21 4.76837158203125e-007
-#define POW2_12  4096
+#define POW2_12 4096
 #define POW2_M38 3.63797880709171e-012
 #define POW2_M11 0.00048828125
 #define POW2_M23 1.19209289550781e-007
@@ -98,73 +98,76 @@
 
 /* C/A code frequency */
 #define CODE_FREQ (1.023e6)
-#define CARR_TO_CODE (1.0/1540.0)
-
+#define CARR_TO_CODE (1.0 / 1540.0)
 
 /*
  * The almanac message for any dummy SVs shall contain alternating ones and zeros
  * with valid parity. (IS-GPS-200L, p.111, 20.3.3.5.1.2)
  */
-#define EMPTY_WORD 0xaaaaaaaaUL 
+#define EMPTY_WORD 0xaaaaaaaaUL
 
 /* Structure representing GPS time */
-typedef struct {
-    int week; /* GPS week number (since January 1980) */
+typedef struct
+{
+    int week;   /* GPS week number (since January 1980) */
     double sec; /* second inside the GPS \a week */
 } gpstime_t;
 
 /* Structure representing UTC time */
-typedef struct {
-    int y; /* Calendar year */
-    int m; /* Calendar month */
-    int d; /* Calendar day */
-    int hh; /* Calendar hour */
-    int mm; /* Calendar minutes */
+typedef struct
+{
+    int y;      /* Calendar year */
+    int m;      /* Calendar month */
+    int d;      /* Calendar day */
+    int hh;     /* Calendar hour */
+    int mm;     /* Calendar minutes */
     double sec; /* Calendar seconds */
 } datetime_t;
 
 /* Structure representing ephemeris of a single satellite */
-typedef struct {
+typedef struct
+{
     int vflg; /* Valid Flag */
-    int sva; /* SV accuracy (URA index) */
-    int svh; /* SV health */
+    int sva;  /* SV accuracy (URA index) */
+    int svh;  /* SV health */
     int code; /* 0 or 1 code L2 (Codes on L2 channel) */
-    int flag; /* L2 P data flag data indicates 
+    int flag; /* L2 P data flag data indicates
                * whether navigation data is being modulated onto the L2 P(Y) code.
                */
     double fit;
     datetime_t t;
     gpstime_t toc; /* Time of Clock */
     gpstime_t toe; /* Time of Ephemeris */
-    int iodc; /* Issue of Data, Clock */
-    int iode; /* Issue of Data, Ephemeris */
+    int iodc;      /* Issue of Data, Clock */
+    int iode;      /* Issue of Data, Ephemeris */
     double deltan; /* Delta-N (radians/sec) */
-    double cuc; /* Cuc (radians) */
-    double cus; /* Cus (radians) */
-    double cic; /* Correction to inclination cos (radians) */
-    double cis; /* Correction to inclination sin (radians) */
-    double crc; /* Correction to radius cos (meters) */
-    double crs; /* Correction to radius sin (meters) */
-    double ecc; /* e Eccentricity */
-    double sqrta; /* sqrt(A) (sqrt(m)) */
-    double m0; /* Mean anomaly (radians) */
-    double omg0; /* Longitude of the ascending node (radians) */
-    double inc0; /* Inclination (radians) */
+    double cuc;    /* Cuc (radians) */
+    double cus;    /* Cus (radians) */
+    double cic;    /* Correction to inclination cos (radians) */
+    double cis;    /* Correction to inclination sin (radians) */
+    double crc;    /* Correction to radius cos (meters) */
+    double crs;    /* Correction to radius sin (meters) */
+    double ecc;    /* e Eccentricity */
+    double sqrta;  /* sqrt(A) (sqrt(m)) */
+    double m0;     /* Mean anomaly (radians) */
+    double omg0;   /* Longitude of the ascending node (radians) */
+    double inc0;   /* Inclination (radians) */
     double aop;
     double omgdot; /* Omega dot (radians/s) */
-    double idot; /* IDOT (radians/s) */
-    double af0; /* a_f0	Clock offset (seconds) */
-    double af1; /* a_f1	rate (sec/sec) */
-    double af2; /* a_f2	acceleration (sec/sec^2) */
-    double tgd; /* Group delay L2 bias */
+    double idot;   /* IDOT (radians/s) */
+    double af0;    /* a_f0	Clock offset (seconds) */
+    double af1;    /* a_f1	rate (sec/sec) */
+    double af2;    /* a_f2	acceleration (sec/sec^2) */
+    double tgd;    /* Group delay L2 bias */
     // Working variables follow
-    double n; /* Mean motion (Average angular velocity) */
-    double sq1e2; /* sqrt(1-e^2) */
-    double A; /* Semi-major axis */
+    double n;       /* Mean motion (Average angular velocity) */
+    double sq1e2;   /* sqrt(1-e^2) */
+    double A;       /* Semi-major axis */
     double omgkdot; /* OmegaDot-OmegaEdot */
 } ephem_t;
 
-typedef struct {
+typedef struct
+{
     int enable;
     int vflg;
     double alpha0, alpha1, alpha2, alpha3;
@@ -172,33 +175,35 @@ typedef struct {
     double A0, A1;
     int dtls, tot, wnt;
     int dtlsf, wnlsf, dn; /* Leap second offset after the last or next event, its GPS week and day of week (1 = Sunday) */
-    int have; /* Groups read from the file: 1 alpha, 2 beta, 4 UTC parameters, 8 leap seconds */
+    int have;             /* Groups read from the file: 1 alpha, 2 beta, 4 UTC parameters, 8 leap seconds */
 } ionoutc_t;
 
-typedef struct {
+typedef struct
+{
     gpstime_t g;
     double range; // pseudorange
-    double d; // geometric distance
+    double d;     // geometric distance
     double azel[2];
     double iono_delay;
 } range_t;
 
 /* Structure representing a Channel */
-typedef struct {
-    int prn; /* PRN Number */
-    int ca[CA_SEQ_LEN]; /* C/A Sequence */
-    double f_carr; /* Carrier frequency */
-    double f_code; /* Code frequency */
-    double carr_phase; /* Carrier phase, 0.0 - 1.0 */
-    double code_phase; /* Code phase */
-    gpstime_t g0; /* GPS time at start */
-	unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF]; /*!< current subframe */
-	unsigned long dwrd[N_DWRD]; /*!< Data words of sub-frame */
-    int iword; /* initial word */
-    int ibit; /* initial bit */
-    int icode; /* initial code */
-    int dataBit; /* current data bit */
-    int codeCA; /* current C/A code */
+typedef struct
+{
+    int prn;                                   /* PRN Number */
+    int ca[CA_SEQ_LEN];                        /* C/A Sequence */
+    double f_carr;                             /* Carrier frequency */
+    double f_code;                             /* Code frequency */
+    double carr_phase;                         /* Carrier phase, 0.0 - 1.0 */
+    double code_phase;                         /* Code phase */
+    gpstime_t g0;                              /* GPS time at start */
+    unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF]; /*!< current subframe */
+    unsigned long dwrd[N_DWRD];                /*!< Data words of sub-frame */
+    int iword;                                 /* initial word */
+    int ibit;                                  /* initial bit */
+    int icode;                                 /* initial code */
+    int dataBit;                               /* current data bit */
+    int codeCA;                                /* current C/A code */
     double azel[2];
     range_t rho0;
 } channel_t;
@@ -206,9 +211,10 @@ typedef struct {
 CURLcode download_file(const char *url, const char *filename, const atomic_bool *cancel);
 
 /* All ephemeris records of a RINEX file, grouped by satellite and sorted by clock time. */
-typedef struct {
-    ephem_t *rec; /* Free with free() */
-    int n; /* Number of records */
+typedef struct
+{
+    ephem_t *rec;           /* Free with free() */
+    int n;                  /* Number of records */
     int first[MAX_SAT + 1]; /* Satellite sv + 1 owns rec[first[sv]] up to, not including, rec[first[sv + 1]] */
 } eph_table_t;
 
@@ -229,4 +235,3 @@ bool ionoDefaults(ionoutc_t *io, gpstime_t g);
 void *gps_thread_ep(void *arg);
 
 #endif /* GPS_H */
-

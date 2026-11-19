@@ -221,5 +221,5 @@ Transmitting on the GPS L1 frequency is regulated in most countries and disturbs
 
 ### License
 
-Copyright &copy; 2021 Mictronics
+Copyright &copy; 2026 Mictronics
 Distributed under the [MIT License](http://www.opensource.org/licenses/mit-license.php).

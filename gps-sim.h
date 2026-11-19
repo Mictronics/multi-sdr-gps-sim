@@ -5,7 +5,7 @@
  * This file is part of the Github project at
  * https://github.com/mictronics/multi-sdr-gps-sim.git
  *
- * Copyright © 2021 Mictronics
+ * Copyright © 2026 Mictronics
  * Distributed under the MIT License.
  *
  */
@@ -21,19 +21,25 @@
 #include <stdatomic.h>
 #include "gps.h"
 
-#define NOTUSED(V) ((void) V)
+#define NOTUSED(V) ((void)V)
 
 // Sampling data format
 #define SC08 sizeof(signed char)
 #define SC16 sizeof(signed short)
 
 /* SDR device types */
-typedef enum {
-    SDR_NONE = 0, SDR_IQFILE, SDR_HACKRF, SDR_PLUTOSDR, SDR_LIMESDR
+typedef enum
+{
+    SDR_NONE = 0,
+    SDR_IQFILE,
+    SDR_HACKRF,
+    SDR_PLUTOSDR,
+    SDR_LIMESDR
 } sdr_type_t;
 
 /* Target information. */
-typedef struct {
+typedef struct
+{
     double bearing;
     double distance;
     double lat;
@@ -46,14 +52,16 @@ typedef struct {
 } target_t;
 
 /* Simulator location. */
-typedef struct {
-    double lat; // Latitude
-    double lon; // Longitude
+typedef struct
+{
+    double lat;    // Latitude
+    double lon;    // Longitude
     double height; // Height/Elevation
 } location_t;
 
 /* All the GPS simulators variables. */
-typedef struct {
+typedef struct
+{
     atomic_bool main_exit;
     atomic_bool gps_thread_exit;
     atomic_bool gps_thread_running;
@@ -78,9 +86,9 @@ typedef struct {
     pthread_mutex_t gps_lock;
     pthread_t gps_thread;
     pthread_cond_t gps_init_done; // Condition signals GPS thread is running
-    location_t location; // Simulator geo location
-    target_t target; // Target information
-    datetime_t start; // Simulation start time
+    location_t location;          // Simulator geo location
+    target_t target;              // Target information
+    datetime_t start;             // Simulation start time
 } simulator_t;
 
 // CPU cores the threads are pinned to when available: the SDR TX thread is
@@ -93,4 +101,3 @@ void set_thread_name(const char *name);
 int thread_to_core(int core_id);
 
 #endif /* GPS_SIM_H */
-

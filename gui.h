@@ -5,7 +5,7 @@
  * This file is part of the Github project at
  * https://github.com/mictronics/multi-sdr-gps-sim.git
  *
- * Copyright © 2021 Mictronics
+ * Copyright © 2026 Mictronics
  * Distributed under the MIT License.
  *
  */
@@ -17,21 +17,22 @@
 #define COL_THRD 120
 #define HEAD_HEIGHT 13
 #define HEAD_WIDTH 19
-#define HEAD_Y  12
-#define HEAD_X  14
+#define HEAD_Y 12
+#define HEAD_X 14
 #define STATUS_HEIGHT 10
 
 // Interactive keys
-#define UP_KEY   'w'
-#define DOWN_KEY  's'
-#define RIGHT_KEY  'd'
-#define LEFT_KEY  'a'
-#define UPSPEED_KEY  'e'
+#define UP_KEY 'w'
+#define DOWN_KEY 's'
+#define RIGHT_KEY 'd'
+#define LEFT_KEY 'a'
+#define UPSPEED_KEY 'e'
 #define DOWNSPEED_KEY 'q'
 #define GAIN_INC_KEY 't'
 #define GAIN_DEC_KEY 'g'
 
-typedef enum {
+typedef enum
+{
     TRACK = 0,
     LS_FIX,
     KF_FIX,
@@ -46,12 +47,14 @@ typedef enum {
     HELP
 } window_panel_t;
 
-typedef enum {
+typedef enum
+{
     OFF = 0,
     ON = 1
 } attr_status_t;
 
-typedef enum {
+typedef enum
+{
     DEFAULT = 0,
     RED = 1,
     GREEN = 2,
@@ -63,8 +66,8 @@ typedef enum {
 void gui_init(void);
 int gui_getch(void);
 void gui_destroy(void);
-void gui_mvwprintw(window_panel_t w, int y, int x, const char * fmt, ...);
-void gui_status_wprintw(status_color_t clr, const char * fmt, ...);
+void gui_mvwprintw(window_panel_t w, int y, int x, const char *fmt, ...);
+void gui_status_wprintw(status_color_t clr, const char *fmt, ...);
 void gui_top_panel(window_panel_t p);
 void gui_toggle_current_panel(void);
 void gui_show_panel(window_panel_t p, attr_status_t onoff);
@@ -75,4 +78,3 @@ void gui_show_location(void *l);
 void gui_show_target(void *t);
 
 #endif /* GUI_H */
-

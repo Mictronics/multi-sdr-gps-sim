@@ -5,7 +5,7 @@
  * This file is part of the Github project at
  * https://github.com/mictronics/multi-sdr-gps-sim.git
  *
- * Copyright © 2021 Mictronics
+ * Copyright © 2026 Mictronics
  * Distributed under the MIT License.
  *
  */
@@ -18,30 +18,31 @@
 
 #define ALMANAC_DOWNLOAD_SEM_URL "https://celestrak.org/GPS/almanac/SEM/almanac.sem.txt"
 
-typedef struct {
+typedef struct
+{
     unsigned char health; // 0=healthy, unhealthy otherwise [], subframe 4 and 5, page 25 six-bit health code
-    unsigned short svid; // GPS SV id or prn number 1-32 []  
-    unsigned int valid; // Validity of this almanac
-    double e; // eccentricity []
-    double delta_i; // orbital inclination at reference time [rad]
-    double omegadot; // rate of right ascension [rad/s]
-    double sqrta; // square root of the semi-major axis [m^(1/2)]
-    double omega0; // longitude of ascending node of orbit plane at weekly epoch [rad]
-    double aop; // argument of perigee [rad]
-    double m0; // mean anomaly at reference time [rad]
-    double af0; // polynomial clock correction coefficient (clock bias) [s], Note: parameters from ephemeris preferred vs almanac (22 vs 11 bits)
-    double af1; // polynomial clock correction coefficient (clock drift) [s/s], Note: parameters from ephemeris preferred vs almanac (16 vs 11 bits)
-    gpstime_t toa; // almanac time of applicability (reference time) [s]
+    unsigned short svid;  // GPS SV id or prn number 1-32 []
+    unsigned int valid;   // Validity of this almanac
+    double e;             // eccentricity []
+    double delta_i;       // orbital inclination at reference time [rad]
+    double omegadot;      // rate of right ascension [rad/s]
+    double sqrta;         // square root of the semi-major axis [m^(1/2)]
+    double omega0;        // longitude of ascending node of orbit plane at weekly epoch [rad]
+    double aop;           // argument of perigee [rad]
+    double m0;            // mean anomaly at reference time [rad]
+    double af0;           // polynomial clock correction coefficient (clock bias) [s], Note: parameters from ephemeris preferred vs almanac (22 vs 11 bits)
+    double af1;           // polynomial clock correction coefficient (clock drift) [s/s], Note: parameters from ephemeris preferred vs almanac (16 vs 11 bits)
+    gpstime_t toa;        // almanac time of applicability (reference time) [s]
 } almanac_prn_t;
 
-typedef struct {
-    unsigned int valid; // Almanac validity
+typedef struct
+{
+    unsigned int valid;        // Almanac validity
     almanac_prn_t sv[MAX_SAT]; // 32 SV's almanac
 } almanac_gps_t;
 
-almanac_gps_t* almanac_init(void);
+almanac_gps_t *almanac_init(void);
 CURLcode almanac_read_file(void);
 CURLcode almanac_download(const atomic_bool *cancel);
 
 #endif /* ALMANAC_H */
-

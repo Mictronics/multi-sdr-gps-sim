@@ -5,7 +5,7 @@
  * This file is part of the Github project at
  * https://github.com/mictronics/multi-sdr-gps-sim.git
  *
- * Copyright © 2021 Mictronics
+ * Copyright © 2026 Mictronics
  * Distributed under the MIT License.
  *
  */
@@ -16,13 +16,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-struct iq_buf {
-    signed char *data8; // 8 bit IQ data
-    signed short *data16; // 16 bit IQ data
+struct iq_buf
+{
+    signed char *data8;       // 8 bit IQ data
+    signed short *data16;     // 16 bit IQ data
     unsigned int totalLength; // Maximum number of samples (allocated size of "data")
     unsigned int validLength; // Number of valid samples in "data"
-    struct iq_buf *next; // linked list forward link
-    struct iq_buf *all_next; // link in the list of all buffers, used by fifo_destroy
+    struct iq_buf *next;      // linked list forward link
+    struct iq_buf *all_next;  // link in the list of all buffers, used by fifo_destroy
 };
 
 // Create the queue structures. Not threadsafe. Returns true on success.
