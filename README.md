@@ -151,7 +151,7 @@ With HackRF support: `make all HACKRFSDR=yes` (depends on libhackrf)
 
 With ADLAM-PLUTO support: `make all PLUTOSDR=yes` (depends on libiio and libad9361-iio)
 
-With LimeSDR support: `make all LIMESDR=yes` (depends on LimeSuiteNG built from source, see above). Tested with LimeSuiteNG commit 4032e99, LimeSDR Mini v1 (gateware 1.30): a Pixel 4 and a Samsung A33 lock at `-g 10` (Pixel from `-g 5`, 25-35 dB-Hz) over a cable with 60 dB of attenuation. The Mini runs from its VCTCXO (about 1.4 ppm off here); leave `-p` at 0, the simulator keeps code and carrier consistent with it.
+With LimeSDR support: `make all LIMESDR=yes` (depends on LimeSuiteNG built from source, see above). Tested with LimeSuiteNG commit 4032e99, LimeSDR Mini v1 (gateware 1.30): a Pixel 4 and a Samsung A33 lock at `-g 10` (Pixel from `-g 5`, 25-35 dB-Hz) over a cable with 60 dB of attenuation. The Pixel's fix was 0.5 m south, 0.1 m west and 0.8 m high of the commanded 48.0, 10.0, 500 m; the A33 tracks less stably and less accurately on the LimeSDR than on the HackRF or Pluto. The Mini runs from its VCTCXO (about 1.4 ppm off here); leave `-p` at 0, the simulator keeps code and carrier consistent with it.
 
 Full SDR support: `make all HACKRFSDR=yes PLUTOSDR=yes LIMESDR=yes`
 
