@@ -1458,7 +1458,7 @@ void generateNavMsg(gpstime_t g, channel_t *chan, int init) {
 
     // Generate subframe words
     for (isbf = 0; isbf < N_SBF; isbf++) {
-        tow++;
+        tow = (tow + 1) % 100800; // TOW count is 0-100799; the last HOW of a week announces 0
 
         for (iwrd = 0; iwrd < N_DWRD_SBF; iwrd++) {
             if (isbf < 3) // Subframes 1-3

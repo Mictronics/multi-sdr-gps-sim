@@ -10,6 +10,7 @@
 #include "almanac.h"
 
 void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *alm, unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF]);
+void generateNavMsg(gpstime_t g, channel_t *chan, int init);
 
 static unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF];
 static int failures;
@@ -126,6 +127,17 @@ int main(void) {
     expect("SF5 page 25 SV id", field(4 + 24 * 2, 63, 6), 51);
     expect("SF5 page 25 toa", field(4 + 24 * 2, 69, 8), 503808 / 4096);
     expect("SF5 page 25 WNa", field(4 + 24 * 2, 77, 8), 2445 % 256);
+
+    // TOW in the HOW of the last frame of a week: subframe 4 announces 100799, subframe 5 the new week's 0
+    static channel_t ch;
+    eph2sbf(eph, io, al, ch.sbf);
+    generateNavMsg((gpstime_t) {2445, 604770.0}, &ch, 1);
+    for (int s = 4; s <= 5; s++) {
+        unsigned long how = ch.dwrd[s * N_DWRD_SBF + 1];
+        if (ch.dwrd[s * N_DWRD_SBF] & 1UL) // D30* set: data bits are sent inverted
+            how ^= 0x3FFFFFC0UL;
+        expect(s == 4 ? "week end SF4 TOW" : "week end SF5 TOW", (how >> 13) & 0x1FFFFUL, s == 4 ? 100799 : 0);
+    }
 
     printf(failures ? "%d FAILURES\n" : "all checks passed\n", failures);
     return failures != 0;
