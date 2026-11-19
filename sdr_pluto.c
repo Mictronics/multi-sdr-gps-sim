@@ -109,11 +109,7 @@ int sdr_pluto_init(simulator_t *simulator) {
     long long lo_hz = 0;
     unsigned long xo_correction = 0;
 
-    // ADLAM-Pluto wants 16 bit signed samples
-    if (simulator->sample_size == SC08) {
-        gui_status_wprintw(YELLOW, "8 bit sample size requested. Reset to 16 bit with ADLAM-Pluto.\n");
-    }
-    simulator->sample_size = SC16;
+    simulator->sample_size = SC16; // ADALM-Pluto takes 16 bit samples only
 
     scan_ctx = iio_create_scan_context(NULL, 0);
     if (!scan_ctx) {
