@@ -15,7 +15,7 @@
 
 #include <stdbool.h>
 
-#define ROW_THRD 26
+#define ROW_THRD 31 // LS_FIX table ends at row 18 (12 GPS + 3 SBAS), above the status separator at rows - 12
 #define COL_THRD 120
 #define HEAD_HEIGHT 13
 #define HEAD_WIDTH 19

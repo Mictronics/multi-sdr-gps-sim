@@ -304,7 +304,7 @@ void gui_init(bool no_tui) {
     endwin();
     /*check if the col and row meet the threshold */
     if (max_y < ROW_THRD || max_x < COL_THRD) {
-        printf("Your console window size is %dx%d need 26x120\n", max_y, max_x);
+        printf("Your console window size is %dx%d, need %dx%d\n", max_x, max_y, COL_THRD, ROW_THRD);
         printf("Do you still want to continue? [Y/N] ");
         ch = getchar();
         if ((ch != 'y') && (ch != 'Y')) {
