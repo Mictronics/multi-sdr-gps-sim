@@ -73,6 +73,9 @@ typedef struct
     bool use_rinex3;
     bool time_overwrite;
     bool almanac_enable;
+    bool sbas_enable;
+    int sbas_prn;    // --sbas: the only GEO used, 0 = chosen from the table
+    double sbas_lon; // its orbital slot [deg]
     int duration;
     int tx_gain;
     int ppb;

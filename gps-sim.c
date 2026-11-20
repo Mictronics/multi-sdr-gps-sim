@@ -29,11 +29,13 @@
 #include "sdr.h"
 #include "fifo.h"
 #include "gps-sim.h"
+#include "sbas.h"
 
 // Everything not listed here starts as zero, NULL or false.
 simulator_t simulator = {
     .ionosphere_enable = true,
     .almanac_enable = true,
+    .sbas_enable = true,
     .duration = USER_MOTION_SIZE,
     .sample_size = SC08,
     .gps_lock = PTHREAD_MUTEX_INITIALIZER,
@@ -161,6 +163,15 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             break;
         case 702: // --disable-almanac
             simulator.almanac_enable = false;
+            break;
+        case 703: // --disable-sbas
+            simulator.sbas_enable = false;
+            break;
+        case 704: // --sbas
+            if (sscanf(arg, "%d,%lf", &simulator.sbas_prn, &simulator.sbas_lon) != 2 ||
+                    simulator.sbas_prn < SBAS_PRN_MIN || simulator.sbas_prn > SBAS_PRN_MAX || fabs(simulator.sbas_lon) > 180.0) {
+                argp_error(state, "Invalid SBAS GEO '%s', expected PRN 120-158,longitude.", arg);
+            }
             break;
         case ARGP_KEY_END:
             if (state->arg_num > 0)

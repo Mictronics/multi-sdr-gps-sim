@@ -23,6 +23,7 @@
 #include "gui.h"
 #include "fifo.h"
 #include "almanac.h"
+#include "sbas.h"
 #include "gps-sim.h"
 
 // Last leap second event, 2016/12/31: used when a RINEX header gives no WN_LSF and DN.
@@ -1350,14 +1351,9 @@ double tropoDelay(const double *llh, const double *azel) {
     return (dry + wet) * 1.001 / sqrt(0.002001 + sel * sel);
 }
 
-/* Compute range between a satellite and the receiver
- * rho The computed range
- * eph Ephemeris data of the satellite
- * g GPS time at time of receiving the signal
- * xyz position of the receiver
- */
-static void computeRange(range_t *rho, ephem_t eph, ionoutc_t *ionoutc, gpstime_t g, double xyz[]) {
-    double pos[3], vel[3], clk[2];
+/* Range from a satellite at pos (m, ECEF) with velocity vel and clock offset clk0 (s), as computeRange */
+static void rangeFromPos(range_t *rho, const double *pos0, const double vel[3], double clk0, ionoutc_t *ionoutc, gpstime_t g, double xyz[]) {
+    double pos[3] = {pos0[0], pos0[1], pos0[2]}; // Moved to the transmission time below
     double los[3];
     double tau;
     double range;
@@ -1365,9 +1361,6 @@ static void computeRange(range_t *rho, ephem_t eph, ionoutc_t *ionoutc, gpstime_
 
     double llh[3], neu[3];
     double tmat[3][3];
-
-    // SV position at time of the pseudorange observation.
-    satpos(eph, g, pos, vel, clk);
 
     // Receiver to satellite vector and light-time.
     subVect(los, pos, xyz);
@@ -1390,7 +1383,7 @@ static void computeRange(range_t *rho, ephem_t eph, ionoutc_t *ionoutc, gpstime_
     rho->d = range;
 
     // Pseudorange.
-    rho->range = range - SPEED_OF_LIGHT * clk[0];
+    rho->range = range - SPEED_OF_LIGHT * clk0;
 
     // Time of application.
     rho->g = g;
@@ -1405,6 +1398,19 @@ static void computeRange(range_t *rho, ephem_t eph, ionoutc_t *ionoutc, gpstime_
     rho->range += rho->iono_delay;
     if (ionoutc->enable) // --disable-iono switches off both atmosphere delays
         rho->range += tropoDelay(llh, rho->azel);
+}
+
+/* Compute range between a satellite and the receiver
+ * rho The computed range
+ * eph Ephemeris data of the satellite
+ * g GPS time at time of receiving the signal
+ * xyz position of the receiver
+ */
+static void computeRange(range_t *rho, ephem_t eph, ionoutc_t *ionoutc, gpstime_t g, double xyz[]) {
+    double pos[3], vel[3], clk[2];
+
+    satpos(eph, g, pos, vel, clk); // SV position at time of the pseudorange observation
+    rangeFromPos(rho, pos, vel, clk[0], ionoutc, g, xyz);
 }
 
 /* Compute the code phase for a given channel (satellite)
@@ -1751,6 +1757,23 @@ static int readUserMotion(double xyz[USER_MOTION_SIZE][3], const char *filename)
 // Satellites with a record near the start time that make -s now keep the ephemeris unshifted
 #define COVER_MIN_SATS 4
 
+#define SBAS_MAX_CHAN 3
+#define SBAS_SYMS (60 * 500) // 60 s of 500 symbol/s, refilled every 30 s
+
+// SBAS GEO channel: 1 ms C/A code, 2 code periods per symbol
+typedef struct {
+    int prn; // 0 = unused
+    double pos[3]; // GEO at rest in ECEF
+    int ca[CA_SEQ_LEN];
+    double f_carr, f_code, carr_phase, code_phase;
+    gpstime_t g0; // Transmit time of sym[0]
+    int isym, icode, symVal, codeCA;
+    unsigned enc; // Convolutional encoder state after the last symbol in sym[]
+    unsigned char sym[SBAS_SYMS];
+    double azel[2];
+    range_t rho0;
+} sbas_chan_t;
+
 // State of the signal generation, shared by the steps of gps_thread_ep.
 typedef struct {
     simulator_t *sim;
@@ -1760,6 +1783,8 @@ typedef struct {
     almanac_gps_t *alm;
     channel_t chan[MAX_CHAN];
     double gain[MAX_CHAN];
+    sbas_chan_t sbas[SBAS_MAX_CHAN];
+    double sbas_gain[SBAS_MAX_CHAN];
     double ant_pat[37]; // Receiver antenna gain per 5 degree of boresight angle
     double (*xyz)[3]; // User position every 0.1 s
     int numd; // Number of positions
@@ -1779,6 +1804,117 @@ static void showChannels(const gps_ctx_t *c) {
         }
     }
     gui_mvwprintw(LS_FIX, LS_ROW_NAV, LS_COL_INFO, "Nav: %02d satellites", row - LS_ROW_CHAN);
+
+    // Fixed rows below the GPS rows, so a changing GPS count leaves no stale SBAS line
+    for (int i = 0; i < SBAS_MAX_CHAN; i++) {
+        const sbas_chan_t *sb = &c->sbas[i];
+        if (sb->prn > 0)
+            gui_mvwprintw(LS_FIX, LS_ROW_CHAN + MAX_CHAN + i, 1, "%03d %5.1f %5.1f %11.1f %5.1f", sb->prn,
+                    sb->azel[0] * R2D, sb->azel[1] * R2D, sb->rho0.d, sb->rho0.iono_delay);
+        else
+            gui_mvwprintw(LS_FIX, LS_ROW_CHAN + MAX_CHAN + i, 1, "%35s", "");
+    }
+}
+
+static int sbasSymbol(const sbas_chan_t *sb) {
+    int k = sb->isym < 0 ? 0 : (sb->isym >= SBAS_SYMS ? SBAS_SYMS - 1 : sb->isym); // A bad range must not index outside
+    return sb->sym[k] * 2 - 1;
+}
+
+/* Encode the messages of nsec seconds, starting at transmit time g, into sym[] from second off on. */
+static void sbasFill(sbas_chan_t *sb, gpstime_t g, int off, int nsec) {
+    unsigned char data[SBAS_DATA_BITS] = {0}, msg[SBAS_MSG_BITS];
+
+    for (int k = 0; k < nsec; k++) {
+        int sec = (int) (incGpsTime(g, k).sec + 0.5);
+        int type = (sec % 60 == 0) ? 9 : 63; // ponytail: MT9 + null messages only, no corrections yet
+
+        if (type == 9)
+            sbas_mt9(sb->pos, sec, data);
+        else
+            memset(data, 0, sizeof (data));
+        sbas_frame(type, data, sec, msg);
+        sbas_encode(&sb->enc, msg, SBAS_MSG_BITS, sb->sym + (off + k) * 500);
+    }
+}
+
+/* Start an SBAS channel at receiver time grx (on a 30 s boundary, or the scenario start) */
+static void sbasStart(sbas_chan_t *sb, const sbas_geo_t *geo, ionoutc_t *ionoutc, gpstime_t grx, double *xyz) {
+    static const double zero[3] = {0.0, 0.0, 0.0};
+
+    sb->prn = geo->prn;
+    sb->pos[0] = SBAS_GEO_RADIUS * cos(geo->lon / R2D);
+    sb->pos[1] = SBAS_GEO_RADIUS * sin(geo->lon / R2D);
+    sb->pos[2] = 0.0;
+    codegen(sb->ca, sb->prn);
+    // Buffer covers [base - 30 s, base + 30 s); +0.05 s because grx sums 0.1 s steps
+    sb->g0.week = grx.week;
+    sb->g0.sec = floor((grx.sec + 0.05) / 30.0) * 30.0;
+    sb->g0 = incGpsTime(sb->g0, -30.0);
+    sb->enc = 0;
+    sbasFill(sb, sb->g0, 0, 60);
+    rangeFromPos(&sb->rho0, sb->pos, zero, 0.0, ionoutc, grx, xyz);
+    sb->azel[0] = sb->rho0.azel[0];
+    sb->azel[1] = sb->rho0.azel[1];
+    sb->carr_phase = 0.0;
+}
+
+/* Choose the GEOs: the system of the highest one, up to SBAS_MAX_CHAN of its GEOs above the horizon.
+ * Channels keep running when their GEO stays chosen. */
+static void allocateSbas(gps_ctx_t *c, double *xyz) {
+    const simulator_t *sim = c->sim;
+    static const double zero[3] = {0.0, 0.0, 0.0};
+    sbas_geo_t forced = {sim->sbas_prn, "SBAS", sim->sbas_lon};
+    const sbas_geo_t *list = sim->sbas_prn ? &forced : sbas_geo;
+    int n = sim->sbas_prn ? 1 : sbas_geo_count;
+    const sbas_geo_t *want[SBAS_MAX_CHAN] = {NULL};
+    double el[64];
+    int best = -1, nwant = 0;
+
+    if (!sim->sbas_enable)
+        return;
+
+    for (int k = 0; k < n; k++) {
+        double pos[3] = {SBAS_GEO_RADIUS * cos(list[k].lon / R2D), SBAS_GEO_RADIUS * sin(list[k].lon / R2D), 0.0};
+        range_t rho;
+        rangeFromPos(&rho, pos, zero, 0.0, &c->ionoutc, c->grx, xyz);
+        el[k] = rho.azel[1];
+        if (el[k] > 0.0 && (best < 0 || el[k] > el[best]))
+            best = k;
+    }
+    // Highest GEOs of the best system first
+    for (int pick = 0; best >= 0 && pick < SBAS_MAX_CHAN; pick++) {
+        int top = -1;
+        for (int k = 0; k < n; k++) {
+            bool taken = false;
+            for (int j = 0; j < nwant; j++)
+                taken |= want[j] == &list[k];
+            if (!taken && el[k] > 0.0 && strcmp(list[k].system, list[best].system) == 0 && (top < 0 || el[k] > el[top]))
+                top = k;
+        }
+        if (top < 0)
+            break;
+        want[nwant++] = &list[top];
+    }
+
+    for (int i = 0; i < SBAS_MAX_CHAN; i++) { // Drop GEOs no longer chosen
+        bool keep = false;
+        for (int j = 0; j < nwant; j++)
+            keep |= c->sbas[i].prn == want[j]->prn;
+        if (!keep)
+            c->sbas[i].prn = 0;
+    }
+    for (int j = 0; j < nwant; j++) { // Start the new ones in free channels
+        bool running = false;
+        for (int i = 0; i < SBAS_MAX_CHAN; i++)
+            running |= c->sbas[i].prn == want[j]->prn;
+        for (int i = 0; !running && i < SBAS_MAX_CHAN; i++) {
+            if (c->sbas[i].prn == 0) {
+                sbasStart(&c->sbas[i], want[j], &c->ionoutc, c->grx, xyz);
+                running = true;
+            }
+        }
+    }
 }
 
 /* Move the ECEF position xyz by neu (north, east, up in metres) in its own local frame.
@@ -2087,6 +2223,7 @@ static void initChannels(gps_ctx_t *c) {
 
     c->grx = incGpsTime(c->g0, 0.0);
     allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[0]);
+    allocateSbas(c, c->xyz[0]);
     showChannels(c);
 
     for (int i = 0; i < 37; i++)
@@ -2129,6 +2266,33 @@ static void updateChannels(gps_ctx_t *c, int iumd) {
             int ibs = (int) ((90.0 - rho.azel[1] * R2D) / 5.0);
             c->gain[i] = path_loss * c->ant_pat[ibs];
         }
+    }
+
+    static const double zero[3] = {0.0, 0.0, 0.0};
+    for (int i = 0; i < SBAS_MAX_CHAN; i++) {
+        sbas_chan_t *sb = &c->sbas[i];
+        if (sb->prn == 0)
+            continue;
+        range_t rho;
+        rangeFromPos(&rho, sb->pos, zero, 0.0, &c->ionoutc, c->grx, c->xyz[iumd]);
+        sb->azel[0] = rho.azel[0];
+        sb->azel[1] = rho.azel[1];
+
+        // As computeCodePhase, with 2 ms symbols counted from the transmit time g0 of sym[0]
+        sb->f_carr = -((rho.range - sb->rho0.range) / 0.1) / LAMBDA_L1;
+        sb->f_code = CODE_FREQ + sb->f_carr * CARR_TO_CODE;
+        double ms = (subGpsTime(sb->rho0.g, sb->g0) - sb->rho0.range / SPEED_OF_LIGHT) * 1000.0;
+        int ims = (int) ms;
+        sb->code_phase = (ms - (double) ims) * CA_SEQ_LEN;
+        sb->isym = ims / 2;
+        sb->icode = ims % 2;
+        sb->codeCA = sb->ca[(int) sb->code_phase] * 2 - 1;
+        sb->symVal = sbasSymbol(sb);
+        sb->rho0 = rho;
+
+        // Path loss relative to the GEO altitude, so an overhead GEO is as strong as an overhead GPS satellite
+        int ibs = (int) ((90.0 - rho.azel[1] * R2D) / 5.0);
+        c->sbas_gain[i] = 35786000.0 / rho.d * c->ant_pat[ibs];
     }
 }
 
@@ -2183,6 +2347,28 @@ static void generateSamples(gps_ctx_t *c) {
 
                 chan[i].carr_phase -= floor(chan[i].carr_phase); // Back to [0, 1) for any step size
             }
+        }
+
+        for (int i = 0; i < SBAS_MAX_CHAN; i++) {
+            sbas_chan_t *sb = &c->sbas[i];
+            if (sb->prn == 0)
+                continue;
+            int iTable = (int) floor(sb->carr_phase * 512.0) & 511;
+            i_acc += sb->symVal * sb->codeCA * sinTable512[(iTable + 128) & 511] * c->sbas_gain[i];
+            q_acc += sb->symVal * sb->codeCA * sinTable512[iTable] * c->sbas_gain[i];
+
+            sb->code_phase += sb->f_code * delt;
+            if (sb->code_phase >= CA_SEQ_LEN) {
+                sb->code_phase -= CA_SEQ_LEN;
+                if (++sb->icode >= 2) { // 2 C/A codes = 1 symbol
+                    sb->icode = 0;
+                    sb->isym++;
+                    sb->symVal = sbasSymbol(sb);
+                }
+            }
+            sb->codeCA = sb->ca[(int) sb->code_phase] * 2 - 1;
+            sb->carr_phase += sb->f_carr * delt;
+            sb->carr_phase -= floor(sb->carr_phase);
         }
 
         c->iq_buff[isamp * 2] = (short) i_acc;
@@ -2251,6 +2437,17 @@ static void updateNavigation(gps_ctx_t *c, int iumd, const double *llh) {
     }
 
     allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[iumd]);
+
+    // Next 30 s of SBAS messages; channels started below fill their own buffer
+    for (int i = 0; i < SBAS_MAX_CHAN; i++) {
+        sbas_chan_t *sb = &c->sbas[i];
+        if (sb->prn > 0) {
+            memmove(sb->sym, sb->sym + SBAS_SYMS / 2, SBAS_SYMS / 2);
+            sb->g0 = incGpsTime(sb->g0, 30.0);
+            sbasFill(sb, incGpsTime(sb->g0, 30.0), 30, 30);
+        }
+    }
+    allocateSbas(c, c->xyz[iumd]);
 
     if (sim->show_verbose) {
         gps2date(&c->grx, &sim->start);

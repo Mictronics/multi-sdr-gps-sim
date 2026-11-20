@@ -49,17 +49,28 @@ int main(void) {
     expect("impulse response G1", g1, 0171);
     expect("impulse response G2", g2, 0133);
 
-    // State carries across messages: two calls give the same symbols as one
+    // State carries across messages: two calls give the same symbols as one (bit 249 is a 1)
     unsigned char whole[2 * 500], split[2 * 500];
     unsigned char in[500];
     for (int i = 0; i < 500; i++)
-        in[i] = (i * 13 + 1) % 3 == 0;
+        in[i] = i % 3 == 0 || i % 7 == 0;
     state = 0;
     sbas_encode(&state, in, 500, whole);
     state = 0;
     sbas_encode(&state, in, 250, split);
     sbas_encode(&state, in + 250, 250, split + 500);
+    expect("test input bit 249", in[249], 1);
     expect("encoder state across messages", memcmp(whole, split, sizeof(whole)), 0);
+
+    // MT9 field positions and scale factors: GEO at 5 deg E, sent at 01:00:00 of day 2
+    double pos[3] = {SBAS_GEO_RADIUS * 0.99619469809, SBAS_GEO_RADIUS * 0.08715574275, 0.0};
+    sbas_mt9(pos, 86400 + 3600, data);
+    expect("MT9 t0 [16 s]", bitsToInt(data + 8, 13), 3600 / 16);
+    expect("MT9 URA", bitsToInt(data + 21, 4), 15);
+    expect("MT9 XG [0.08 m]", bitsToInt(data + 25, 30), 525046533);
+    expect("MT9 YG [0.08 m]", bitsToInt(data + 55, 30), 45935619);
+    expect("MT9 ZG", bitsToInt(data + 85, 25), 0);
+    expect("MT9 rest is 0", bitsToInt(data + 110, 60) | bitsToInt(data + 170, 42), 0);
 
     printf(failures ? "%d FAILURES\n" : "all checks passed\n", failures);
     return failures != 0;
