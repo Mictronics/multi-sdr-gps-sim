@@ -1,9 +1,15 @@
 /* Checks the SBAS L1 message framing and convolutional code.
  * Run with "make test".
  */
+#include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include "gps.h"
 #include "sbas.h"
+
+void sbasIonoUpdate(sbas_iono_t *ion, const ionoutc_t *ionoutc, gpstime_t g, const double *llh);
+double ionosphericDelay(const ionoutc_t *ionoutc, gpstime_t g, double *llh, double *azel);
 
 static int failures;
 static void expect(const char *what, unsigned long got, unsigned long want) {
@@ -77,7 +83,7 @@ int main(void) {
     for (int sv = 0; sv < 32; sv++)
         iode[sv] = (sv % 5 == 3) ? -1 : (sv * 7 + 1) % 256; // some PRNs without ephemeris
     for (int sec = 120; sec < 180; sec++) {
-        int type = sbas_message(sec, iode, pos, data);
+        int type = sbas_message(sec, iode, pos, NULL, data);
         count[type]++;
         if (sec % 6 < 3)
             expect("MT2/3/4 at sec % 6 = 0/1/2", type, 2 + sec % 6);
@@ -122,6 +128,99 @@ int main(void) {
     expect("MT25 per minute", count[25], 8);
     for (int sv = 0; sv < 32; sv++)
         expect("MT25 once per PRN with ephemeris", seen25[sv + 1], iode[sv] >= 0 ? 1 : 0);
+
+    // IGP geometry: spot checks against RTKLIB's igpband1 (mask bits counted from 0)
+    double la, lo;
+    expect("IGP band 4 bit 0", sbas_igp(4, 0, &la, &lo) && la == -75 && lo == -20, 1);
+    expect("IGP band 4 bit 127 (85 N at 0 E)", sbas_igp(4, 127, &la, &lo) && la == 85 && lo == 0, 1);
+    expect("IGP band 4 bit 128", sbas_igp(4, 128, &la, &lo) && la == -55 && lo == 5, 1);
+    expect("IGP band 1 bit 0 (85 S at 140 W)", sbas_igp(1, 0, &la, &lo) && la == -85 && lo == -140, 1);
+    expect("IGP band 0 bit 200", sbas_igp(0, 200, &la, &lo) && la == 55 && lo == -145, 1);
+    expect("IGP band 8 bit 199", sbas_igp(8, 199, &la, &lo) && la == 55 && lo == 175, 1);
+    expect("IGP band 8 has 200", sbas_igp(8, 200, &la, &lo), 0);
+
+    // Grid at 48 N 10 E: bands 3-5, IODI kept while the mask is the same, changed after a move
+    ionoutc_t io = {0};
+    io.enable = 1;
+    io.vflg = 1;
+    io.alpha0 = 1.1176e-8; io.alpha1 = 7.4506e-9; io.alpha2 = -5.9605e-8; io.alpha3 = -5.9605e-8;
+    io.beta0 = 90112; io.beta1 = 0; io.beta2 = -196608; io.beta3 = -65536;
+    gpstime_t g = {2443, 4 * 86400 + 12 * 3600 - 10 / 15.0 * 3600}; // 14:00 local time at 10 E
+    double llh[3] = {48.0 / 57.29577951308232, 10.0 / 57.29577951308232, 500.0};
+    static sbas_iono_t ion;
+    sbasIonoUpdate(&ion, &io, g, llh);
+    expect("grid bands", ion.nband, 3);
+    expect("grid band numbers", ion.band[0] * 100 + ion.band[1] * 10 + ion.band[2], 345);
+    int iodi = ion.iodi;
+    sbasIonoUpdate(&ion, &io, g, llh);
+    expect("IODI kept for the same mask", ion.iodi, iodi);
+    double far[3] = {40.0 / 57.29577951308232, -100.0 / 57.29577951308232, 0.0};
+    sbasIonoUpdate(&ion, &io, g, far);
+    expect("IODI changed after a far move", ion.iodi, (iodi + 1) % 4);
+    sbasIonoUpdate(&ion, &io, g, llh);
+
+    // MT18/MT26 in 5 minutes: every band's mask and every block, fields as the grid
+    int seen18[SBAS_MAX_BANDS] = {0}, seen26[SBAS_MAX_BANDS][14] = {{0}};
+    for (int sec = 600; sec < 900; sec++) {
+        int type = sbas_message(sec, iode, pos, &ion, data);
+        expect("no null message with a grid", type == 63, 0);
+        if (type == 18) {
+            int k;
+            for (k = 0; k < ion.nband && ion.band[k] != (int) bitsToInt(data + 4, 4); k++)
+                ;
+            seen18[k]++;
+            expect("MT18 number of bands", bitsToInt(data, 4), 3);
+            expect("MT18 IODI", bitsToInt(data + 8, 2), (unsigned long) ion.iodi);
+            expect("MT18 mask", memcmp(data + 10, ion.mask[k], SBAS_BAND_BITS), 0);
+        } else if (type == 26) {
+            int k, blk = (int) bitsToInt(data + 4, 4);
+            for (k = 0; k < ion.nband && ion.band[k] != (int) bitsToInt(data, 4); k++)
+                ;
+            seen26[k][blk]++;
+            expect("MT26 IODI", bitsToInt(data + 203, 2), (unsigned long) ion.iodi);
+            for (int i = 0; i < 15 && 15 * blk + i < ion.nigp[k]; i++) {
+                expect("MT26 GIVD", bitsToInt(data + 8 + 13 * i, 9), (unsigned long) lround(ion.delay[k][15 * blk + i] / 0.125));
+                expect("MT26 GIVEI", bitsToInt(data + 17 + 13 * i, 4), 6);
+            }
+        }
+    }
+    for (int k = 0; k < ion.nband; k++) {
+        expect("MT18 of each band within 300 s", seen18[k] > 0, 1);
+        for (int b = 0; b < (ion.nigp[k] + 14) / 15; b++)
+            expect("MT26 of each block within 300 s", seen26[k][b] > 0, 1);
+    }
+
+    // A receiver's MOPS model from our grid (pierce point at 350 km, bilinear in the 5 deg cell,
+    // MOPS obliquity) must give the Klobuchar slant delay the signal carries, within 1 m above 15 deg
+    const double d2r = 1 / 57.29577951308232, re = 6378.1363, hi = 350.0;
+    double worst = 0.0;
+    for (double az = 90; az <= 270; az += 15)
+        for (double el = 15; el <= 90; el += 15) {
+            double E = el * d2r, A = az * d2r;
+            double psi = M_PI / 2 - E - asin(re / (re + hi) * cos(E));
+            double plat = asin(sin(llh[0]) * cos(psi) + cos(llh[0]) * sin(psi) * cos(A));
+            double plon = llh[1] + asin(sin(psi) * sin(A) / cos(plat));
+            plat /= d2r; plon /= d2r;
+            double la0 = floor(plat / 5) * 5, lo0 = floor(plon / 5) * 5, v[4] = {0};
+            int found = 0;
+            for (int k = 0; k < ion.nband; k++)
+                for (int i = 0; i < ion.nigp[k]; i++)
+                    for (int c = 0; c < 4; c++)
+                        if (ion.lat[k][i] == la0 + 5 * (c / 2) && ion.lon[k][i] == lo0 + 5 * (c % 2)) {
+                            v[c] = ion.delay[k][i];
+                            found |= 1 << c;
+                        }
+            expect("pierce point cell has 4 IGPs", found, 15);
+            double x = (plon - lo0) / 5, y = (plat - la0) / 5;
+            double vert = (1 - x) * (1 - y) * v[0] + x * (1 - y) * v[1] + (1 - x) * y * v[2] + x * y * v[3];
+            double F = 1 / sqrt(1 - pow(re * cos(E) / (re + hi), 2));
+            double azel[2] = {A, E};
+            double klob = ionosphericDelay(&io, g, llh, azel);
+            if (fabs(F * vert - klob) > worst)
+                worst = fabs(F * vert - klob);
+        }
+    printf("grid vs Klobuchar slant delay: worst %.2f m\n", worst);
+    expect("grid vs Klobuchar within 1 m", worst < 1.0, 1);
 
     printf(failures ? "%d FAILURES\n" : "all checks passed\n", failures);
     return failures != 0;

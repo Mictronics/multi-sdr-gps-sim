@@ -157,22 +157,129 @@ static void mt25(int k, const int *iode, unsigned char *data) {
     }
 }
 
+/* IGP at mask bit (0-200) of band 0-8, as RTKLIB's igpband1 (DO-229 appendix A); 0 if the bit
+ * has no IGP (band 8 has 200). Columns are 5 deg apart; 10 deg columns reach +-75 deg, the others
+ * +-55 deg, and one column per band also has the IGP at 85 N or 85 S. */
+int sbas_igp(int band, int bit, double *lat, double *lon) {
+    for (int c = 0; c < 8; c++) {
+        int lo = -180 + 40 * band + 5 * c, n = 0;
+        double lats[28];
+
+        if (lo == -140 || lo == -50 || lo == 40 || lo == 130)
+            lats[n++] = -85;
+        if (c % 2 == 0) {
+            lats[n++] = -75;
+            lats[n++] = -65;
+        }
+        for (int la = -55; la <= 55; la += 5)
+            lats[n++] = la;
+        if (c % 2 == 0) {
+            lats[n++] = 65;
+            lats[n++] = 75;
+        }
+        if (lo == -180 || lo == -90 || lo == 0 || lo == 90)
+            lats[n++] = 85;
+        if (bit < n) {
+            *lat = lats[bit];
+            *lon = lo;
+            return 1;
+        }
+        bit -= n;
+    }
+    return 0;
+}
+
+/* Mask the IGPs within 25 deg latitude and 30 deg great-circle longitude of the user, which
+ * covers the pierce points down to 5 deg elevation. IODI changes when the mask does. */
+void sbas_iono_mask(double lat, double lon, sbas_iono_t *ion) {
+    sbas_iono_t old = *ion;
+
+    ion->nband = 0;
+    for (int b = 0; b <= 8 && ion->nband < SBAS_MAX_BANDS; b++) {
+        int k = ion->nband, n = 0;
+        for (int i = 0; i < SBAS_BAND_BITS; i++) {
+            double la, lo;
+            int in = 0;
+            if (sbas_igp(b, i, &la, &lo)) {
+                double dlon = fmod(lo - lon + 540.0, 360.0) - 180.0;
+                in = fabs(la - lat) <= 25.0 && fabs(dlon) * cos(lat / 57.29577951308232) <= 30.0;
+            }
+            ion->mask[k][i] = in;
+            if (in) {
+                ion->lat[k][n] = la;
+                ion->lon[k][n++] = lo;
+            }
+        }
+        if (n > 0) {
+            ion->band[k] = b;
+            ion->nigp[k] = n;
+            ion->nband++;
+        }
+    }
+    int same = old.nband == ion->nband;
+    for (int k = 0; same && k < ion->nband; k++)
+        same = old.band[k] == ion->band[k] && memcmp(old.mask[k], ion->mask[k], SBAS_BAND_BITS) == 0;
+    ion->iodi = same ? old.iodi : (old.iodi + 1) % 4;
+}
+
+// MT18: IGP mask of the k-th band
+static void mt18(const sbas_iono_t *ion, int k, unsigned char *data) {
+    int off = 0;
+    putBits(data, &off, ion->nband, 4);
+    putBits(data, &off, ion->band[k], 4);
+    putBits(data, &off, ion->iodi, 2);
+    for (int i = 0; i < SBAS_BAND_BITS; i++)
+        data[off++] = ion->mask[k][i];
+}
+
+// MT26: vertical delays (0.125 m) of block blk (15 IGPs) of the k-th band, GIVEI 6 as EGNOS mostly sends
+static void mt26(const sbas_iono_t *ion, int k, int blk, unsigned char *data) {
+    int off = 0;
+    putBits(data, &off, ion->band[k], 4);
+    putBits(data, &off, blk, 4);
+    for (int i = 15 * blk; i < 15 * blk + 15; i++) {
+        if (i < ion->nigp[k]) {
+            long givd = lround(ion->delay[k][i] / 0.125);
+            putBits(data, &off, givd < 0 ? 0 : (givd > 510 ? 510 : givd), 9); // 511 means "do not use"
+            putBits(data, &off, 6, 4);
+        } else {
+            putBits(data, &off, 0, 9);
+            putBits(data, &off, 15, 4); // past the last IGP of the band: not monitored
+        }
+    }
+    putBits(data, &off, ion->iodi, 2);
+}
+
 /* Data field of the message sent at second of week sec, returns its type. iode[sv] is the IODE
- * of GPS PRN sv + 1, -1 without ephemeris; pos is the GEO for MT9 (ECEF, m).
- * Every 6 s MT2, MT3, MT4, then three slots from a 60 s list: MT1 twice, all 8 MT25, MT9, MT7, MT10.
- * ponytail: zero corrections; MT18/MT26 (ionosphere) come with phase 5. */
-int sbas_message(int sec, const int *iode, const double *pos, unsigned char *data) {
+ * of GPS PRN sv + 1, -1 without ephemeris; pos is the GEO for MT9 (ECEF, m); ion the grid.
+ * Every 6 s MT2, MT3, MT4, then three slots from a 60 s list: MT1 twice, all 8 MT25, MT9, MT7,
+ * MT10, and 17 slots that cycle through MT18 and the MT26 blocks of each band (all within 300 s).
+ * The ionosphere messages also give the stream enough symbol transitions: with only zero
+ * corrections and null messages a u-blox M8T never synchronised (15 % vs 24 % transitions). */
+int sbas_message(int sec, const int *iode, const double *pos, const sbas_iono_t *ion, unsigned char *data) {
     static const int rest[30] = {1, 25, 25, 25, 25, 9, 7, 10, 25, 25, 25, 25, 63, 63, 63,
                                  1, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63};
-    int s = sec % 60, type, n25 = 0;
+    int s = sec % 60, type, n25 = 0, n63 = 0, iono_k = 0, iono_blk = -1;
 
     if (s % 6 < 3) {
         type = 2 + s % 6;
     } else {
         int idx = (s / 6) * 3 + s % 6 - 3;
         type = rest[idx];
-        for (int i = 0; i < idx; i++) // which of the 8 MT25 this is
+        for (int i = 0; i < idx; i++) { // which of the 8 MT25 / 17 free slots this is
             n25 += rest[i] == 25;
+            n63 += rest[i] == 63;
+        }
+    }
+    if (type == 63 && ion != NULL && ion->nband > 0) {
+        int total = 0;
+        for (int k = 0; k < ion->nband; k++)
+            total += 1 + (ion->nigp[k] + 14) / 15;
+        int item = ((sec / 60) * 17 + n63) % total; // position in the MT18/MT26 cycle
+        for (iono_k = 0; item >= 1 + (ion->nigp[iono_k] + 14) / 15; iono_k++)
+            item -= 1 + (ion->nigp[iono_k] + 14) / 15;
+        iono_blk = item - 1; // -1: the band's MT18
+        type = iono_blk < 0 ? 18 : 26;
     }
     memset(data, 0, SBAS_DATA_BITS);
     switch (type) {
@@ -182,6 +289,8 @@ int sbas_message(int sec, const int *iode, const double *pos, unsigned char *dat
         case 9: sbas_mt9(pos, sec, data); break;
         case 10: mt10(data); break;
         case 25: mt25(n25, iode, data); break;
+        case 18: mt18(ion, iono_k, data); break;
+        case 26: mt26(ion, iono_k, iono_blk, data); break;
         default: break; // 63: null message
     }
     return type;

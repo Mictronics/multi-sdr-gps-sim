@@ -1257,9 +1257,51 @@ void ephSelect(const eph_table_t *tab, gpstime_t t, ephem_t cur[MAX_SAT]) {
     }
 }
 
-static double ionosphericDelay(const ionoutc_t *ionoutc, gpstime_t g, double *llh, double *azel) {
-    double iono_delay = 0.0;
+/* Klobuchar vertical delay [s] at a pierce point, phi_i and lam_i in semi-circles */
+static double klobucharVertical(const ionoutc_t *ionoutc, gpstime_t g, double phi_i, double lam_i) {
+    double t, phi_m, phi_m2, phi_m3;
+    double AMP, PER, X, X2, X4;
+
+    if (ionoutc->vflg == false)
+        return 5.0e-9;
+
+    // Geomagnetic latitude of the earth projection of the ionospheric intersection
+    // point (mean ionospheric height assumed 350 km) (semi-circles)
+    phi_m = phi_i + 0.064 * cos((lam_i - 1.617) * PI);
+    phi_m2 = phi_m*phi_m;
+    phi_m3 = phi_m2*phi_m;
+
+    AMP = ionoutc->alpha0 + ionoutc->alpha1 * phi_m
+            + ionoutc->alpha2 * phi_m2 + ionoutc->alpha3*phi_m3;
+    if (AMP < 0.0)
+        AMP = 0.0;
+
+    PER = ionoutc->beta0 + ionoutc->beta1 * phi_m
+            + ionoutc->beta2 * phi_m2 + ionoutc->beta3*phi_m3;
+    if (PER < 72000.0)
+        PER = 72000.0;
+
+    // Local time (sec)
+    t = SECONDS_IN_DAY / 2.0 * lam_i + g.sec;
+    while (t >= SECONDS_IN_DAY)
+        t -= SECONDS_IN_DAY;
+    while (t < 0)
+        t += SECONDS_IN_DAY;
+
+    // Phase (radians)
+    X = 2.0 * PI * (t - 50400.0) / PER;
+
+    if (fabs(X) < 1.57) {
+        X2 = X*X;
+        X4 = X2*X2;
+        return 5.0e-9 + AMP * (1.0 - X2 / 2.0 + X4 / 24.0);
+    }
+    return 5.0e-9;
+}
+
+double ionosphericDelay(const ionoutc_t *ionoutc, gpstime_t g, double *llh, double *azel) {
     double E, phi_u, lam_u, F;
+    double psi, phi_i, lam_i;
 
     if (ionoutc->enable == false)
         return (0.0); // No ionospheric delay
@@ -1272,62 +1314,34 @@ static double ionosphericDelay(const ionoutc_t *ionoutc, gpstime_t g, double *ll
     F = 1.0 + 16.0 * pow((0.53 - E), 3.0);
 
     if (ionoutc->vflg == false)
-        iono_delay = F * 5.0e-9 * SPEED_OF_LIGHT;
-    else {
-        double t, psi, phi_i, lam_i, phi_m, phi_m2, phi_m3;
-        double AMP, PER, X, X2, X4;
+        return F * klobucharVertical(ionoutc, g, 0.0, 0.0) * SPEED_OF_LIGHT;
 
-        // Earth's central angle between the user position and the earth projection of
-        // ionospheric intersection point (semi-circles)
-        psi = 0.0137 / (E + 0.11) - 0.022;
+    // Earth's central angle between the user position and the earth projection of
+    // ionospheric intersection point (semi-circles)
+    psi = 0.0137 / (E + 0.11) - 0.022;
 
-        // Geodetic latitude of the earth projection of the ionospheric intersection point
-        // (semi-circles)
-        phi_i = phi_u + psi * cos(azel[0]);
-        if (phi_i > 0.416)
-            phi_i = 0.416;
-        else if (phi_i<-0.416)
-            phi_i = -0.416;
+    // Geodetic latitude of the earth projection of the ionospheric intersection point
+    // (semi-circles)
+    phi_i = phi_u + psi * cos(azel[0]);
+    if (phi_i > 0.416)
+        phi_i = 0.416;
+    else if (phi_i<-0.416)
+        phi_i = -0.416;
 
-        // Geodetic longitude of the earth projection of the ionospheric intersection point
-        // (semi-circles)
-        lam_i = lam_u + psi * sin(azel[0]) / cos(phi_i * PI);
+    // Geodetic longitude of the earth projection of the ionospheric intersection point
+    // (semi-circles)
+    lam_i = lam_u + psi * sin(azel[0]) / cos(phi_i * PI);
 
-        // Geomagnetic latitude of the earth projection of the ionospheric intersection
-        // point (mean ionospheric height assumed 350 km) (semi-circles)
-        phi_m = phi_i + 0.064 * cos((lam_i - 1.617) * PI);
-        phi_m2 = phi_m*phi_m;
-        phi_m3 = phi_m2*phi_m;
+    return F * klobucharVertical(ionoutc, g, phi_i, lam_i) * SPEED_OF_LIGHT;
+}
 
-        AMP = ionoutc->alpha0 + ionoutc->alpha1 * phi_m
-                + ionoutc->alpha2 * phi_m2 + ionoutc->alpha3*phi_m3;
-        if (AMP < 0.0)
-            AMP = 0.0;
-
-        PER = ionoutc->beta0 + ionoutc->beta1 * phi_m
-                + ionoutc->beta2 * phi_m2 + ionoutc->beta3*phi_m3;
-        if (PER < 72000.0)
-            PER = 72000.0;
-
-        // Local time (sec)
-        t = SECONDS_IN_DAY / 2.0 * lam_i + g.sec;
-        while (t >= SECONDS_IN_DAY)
-            t -= SECONDS_IN_DAY;
-        while (t < 0)
-            t += SECONDS_IN_DAY;
-
-        // Phase (radians)
-        X = 2.0 * PI * (t - 50400.0) / PER;
-
-        if (fabs(X) < 1.57) {
-            X2 = X*X;
-            X4 = X2*X2;
-            iono_delay = F * (5.0e-9 + AMP * (1.0 - X2 / 2.0 + X4 / 24.0)) * SPEED_OF_LIGHT;
-        } else
-            iono_delay = F * 5.0e-9 * SPEED_OF_LIGHT;
-    }
-
-    return (iono_delay);
+/* SBAS ionospheric grid around the user at llh (rad): mask, then the Klobuchar vertical delay the
+ * signal carries at every IGP (0 with --disable-iono) */
+void sbasIonoUpdate(sbas_iono_t *ion, const ionoutc_t *ionoutc, gpstime_t g, const double *llh) {
+    sbas_iono_mask(llh[0] * R2D, llh[1] * R2D, ion);
+    for (int k = 0; k < ion->nband; k++)
+        for (int i = 0; i < ion->nigp[k]; i++)
+            ion->delay[k][i] = ionoutc->enable ? klobucharVertical(ionoutc, g, ion->lat[k][i] / 180.0, ion->lon[k][i] / 180.0) * SPEED_OF_LIGHT : 0.0;
 }
 
 /* Troposphere delay in metres: Saastamoinen zenith delay with a standard atmosphere (15 C and
@@ -1785,6 +1799,7 @@ typedef struct {
     double gain[MAX_CHAN];
     sbas_chan_t sbas[SBAS_MAX_CHAN];
     double sbas_gain[SBAS_MAX_CHAN];
+    sbas_iono_t sbas_iono; // Ionospheric grid around the user, sent by all GEOs
     double ant_pat[37]; // Receiver antenna gain per 5 degree of boresight angle
     double (*xyz)[3]; // User position every 0.1 s
     int numd; // Number of positions
@@ -1823,7 +1838,7 @@ static int sbasSymbol(const sbas_chan_t *sb) {
 
 /* Encode the messages of nsec seconds, starting at transmit time g, into sym[] from second off on.
  * eph gives the IODEs the long term corrections refer to. */
-static void sbasFill(sbas_chan_t *sb, const ephem_t *eph, gpstime_t g, int off, int nsec) {
+static void sbasFill(sbas_chan_t *sb, const ephem_t *eph, const sbas_iono_t *ion, gpstime_t g, int off, int nsec) {
     unsigned char data[SBAS_DATA_BITS], msg[SBAS_MSG_BITS];
     int iode[MAX_SAT];
 
@@ -1831,7 +1846,7 @@ static void sbasFill(sbas_chan_t *sb, const ephem_t *eph, gpstime_t g, int off, 
         iode[sv] = eph[sv].vflg ? eph[sv].iode : -1;
     for (int k = 0; k < nsec; k++) {
         int sec = (int) (incGpsTime(g, k).sec + 0.5);
-        int type = sbas_message(sec, iode, sb->pos, data);
+        int type = sbas_message(sec, iode, sb->pos, ion, data);
 
         sbas_frame(type, data, sec, msg);
         sbas_encode(&sb->enc, msg, SBAS_MSG_BITS, sb->sym + (off + k) * 500);
@@ -1839,7 +1854,7 @@ static void sbasFill(sbas_chan_t *sb, const ephem_t *eph, gpstime_t g, int off, 
 }
 
 /* Start an SBAS channel at receiver time grx (on a 30 s boundary, or the scenario start) */
-static void sbasStart(sbas_chan_t *sb, const sbas_geo_t *geo, const ephem_t *eph, ionoutc_t *ionoutc, gpstime_t grx, double *xyz) {
+static void sbasStart(sbas_chan_t *sb, const sbas_geo_t *geo, const ephem_t *eph, const sbas_iono_t *ion, ionoutc_t *ionoutc, gpstime_t grx, double *xyz) {
     static const double zero[3] = {0.0, 0.0, 0.0};
 
     sb->prn = geo->prn;
@@ -1852,7 +1867,7 @@ static void sbasStart(sbas_chan_t *sb, const sbas_geo_t *geo, const ephem_t *eph
     sb->g0.sec = floor((grx.sec + 0.05) / 30.0) * 30.0;
     sb->g0 = incGpsTime(sb->g0, -30.0);
     sb->enc = 0;
-    sbasFill(sb, eph, sb->g0, 0, 60);
+    sbasFill(sb, eph, ion, sb->g0, 0, 60);
     rangeFromPos(&sb->rho0, sb->pos, zero, 0.0, ionoutc, grx, xyz);
     sb->azel[0] = sb->rho0.azel[0];
     sb->azel[1] = sb->rho0.azel[1];
@@ -1910,7 +1925,7 @@ static void allocateSbas(gps_ctx_t *c, double *xyz) {
             running |= c->sbas[i].prn == want[j]->prn;
         for (int i = 0; !running && i < SBAS_MAX_CHAN; i++) {
             if (c->sbas[i].prn == 0) {
-                sbasStart(&c->sbas[i], want[j], c->eph, &c->ionoutc, c->grx, xyz);
+                sbasStart(&c->sbas[i], want[j], c->eph, &c->sbas_iono, &c->ionoutc, c->grx, xyz);
                 running = true;
             }
         }
@@ -2223,6 +2238,11 @@ static void initChannels(gps_ctx_t *c) {
 
     c->grx = incGpsTime(c->g0, 0.0);
     allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[0]);
+    if (c->sim->sbas_enable) {
+        double llh[3];
+        xyz2llh(c->xyz[0], llh);
+        sbasIonoUpdate(&c->sbas_iono, &c->ionoutc, c->grx, llh);
+    }
     allocateSbas(c, c->xyz[0]);
     showChannels(c);
 
@@ -2439,12 +2459,14 @@ static void updateNavigation(gps_ctx_t *c, int iumd, const double *llh) {
     allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[iumd]);
 
     // Next 30 s of SBAS messages; channels started below fill their own buffer
+    if (sim->sbas_enable)
+        sbasIonoUpdate(&c->sbas_iono, &c->ionoutc, c->grx, llh);
     for (int i = 0; i < SBAS_MAX_CHAN; i++) {
         sbas_chan_t *sb = &c->sbas[i];
         if (sb->prn > 0) {
             memmove(sb->sym, sb->sym + SBAS_SYMS / 2, SBAS_SYMS / 2);
             sb->g0 = incGpsTime(sb->g0, 30.0);
-            sbasFill(sb, c->eph, incGpsTime(sb->g0, 30.0), 30, 30);
+            sbasFill(sb, c->eph, &c->sbas_iono, incGpsTime(sb->g0, 30.0), 30, 30);
         }
     }
     allocateSbas(c, c->xyz[iumd]);

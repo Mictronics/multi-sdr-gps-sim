@@ -34,8 +34,25 @@ extern const int sbas_geo_count;
 // Bits are one per byte (0/1), most significant bit of each field first.
 unsigned long sbas_crc24q(const unsigned char *bits, int n);
 void sbas_frame(int type, const unsigned char *data, int sec, unsigned char *msg);
+#define SBAS_MAX_BANDS 5
+#define SBAS_BAND_BITS 201
+
+// Ionospheric grid sent in MT18/MT26: the masked IGPs of up to SBAS_MAX_BANDS bands (0-8)
+typedef struct {
+    int nband;
+    int band[SBAS_MAX_BANDS];
+    unsigned char mask[SBAS_MAX_BANDS][SBAS_BAND_BITS];
+    int nigp[SBAS_MAX_BANDS];                   // IGPs in the mask, in mask order:
+    double lat[SBAS_MAX_BANDS][SBAS_BAND_BITS]; // their latitude and longitude [deg]
+    double lon[SBAS_MAX_BANDS][SBAS_BAND_BITS];
+    double delay[SBAS_MAX_BANDS][SBAS_BAND_BITS]; // vertical delay [m], filled by the caller
+    int iodi;
+} sbas_iono_t;
+
 void sbas_mt9(const double *pos, int sec, unsigned char *data);
-int sbas_message(int sec, const int *iode, const double *pos, unsigned char *data);
+int sbas_igp(int band, int bit, double *lat, double *lon);
+void sbas_iono_mask(double lat, double lon, sbas_iono_t *ion);
+int sbas_message(int sec, const int *iode, const double *pos, const sbas_iono_t *ion, unsigned char *data);
 void sbas_encode(unsigned *state, const unsigned char *bits, int n, unsigned char *sym);
 
 #endif /* SBAS_H */
