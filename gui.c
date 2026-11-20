@@ -26,6 +26,8 @@ static const int info_width = 50;
 static const int info_height = 13;
 static const int help_width = 50;
 static const int help_height = 13;
+#define VALUE_PAIR (YELLOW + 1) // Speed and heading values, red on white
+
 static int max_x = 0;
 static int max_y = 0;
 static bool headless = false; // --no-tui: no curses, status lines go to stderr
@@ -56,9 +58,9 @@ static void raise_overlays(void) {
 }
 
 static void show_footer(WINDOW *win) {
-    wattron(win, COLOR_PAIR(2));
+    wattron(win, COLOR_PAIR(GREEN));
     mvwprintw(win, max_y - STATUS_HEIGHT - 2, 10, "TAB or F1-F3 switch displays, 'x' Exit, 'i' Info, 'h' Help");
-    wattroff(win, COLOR_PAIR(2));
+    wattroff(win, COLOR_PAIR(GREEN));
 }
 
 /* Show the window with a border and a label */
@@ -79,18 +81,18 @@ static void show_window(WINDOW *win, const char *label) {
     mvwhline(win, max_y - STATUS_HEIGHT - 2, 1, ACS_HLINE, max_x - 2);
     mvwaddch(win, max_y - STATUS_HEIGHT - 2, max_x - 1, ACS_RTEE);
     // Header label
-    wattron(win, COLOR_PAIR(1));
+    wattron(win, COLOR_PAIR(RED));
     mvwprintw(win, 1, startx, "%s", label);
-    wattroff(win, COLOR_PAIR(1));
+    wattroff(win, COLOR_PAIR(RED));
     show_footer(win);
 }
 
 //print the header info for LS fix result display
 
 static void ls_show_header(void) {
-    wattron(window[LS_FIX], COLOR_PAIR(2));
-    mvwprintw(window[LS_FIX], 3, 1, "PRN  AZ    ELEV  PRange       dIon");
-    wattroff(window[LS_FIX], COLOR_PAIR(2));
+    wattron(window[LS_FIX], COLOR_PAIR(GREEN));
+    mvwprintw(window[LS_FIX], LS_ROW_CHAN - 1, 1, "PRN  AZ    ELEV  PRange       dIon");
+    wattroff(window[LS_FIX], COLOR_PAIR(GREEN));
 }
 
 static void show_heading(float degree) {
@@ -107,77 +109,75 @@ static void show_heading(float degree) {
     mvwprintw(window[HEADING], 6, 16, "90>");
     mvwprintw(window[HEADING], 11, 8, "180");
     mvwaddch(window[HEADING], 12, 9, ACS_DARROW);
-    //wattron(window[HEADING],COLOR_PAIR(5)|A_BOLD);
     mvwaddch(window[HEADING], 6, 9, ACS_DIAMOND);
-    //wattroff(window[HEADING],COLOR_PAIR(5)|A_BOLD);
     //show window title
-    wattron(window[HEADING], COLOR_PAIR(11) | A_BOLD);
+    wattron(window[HEADING], COLOR_PAIR(BLUE) | A_BOLD);
     mvwprintw(window[HEADING], 4, 6, "DIRECTION");
-    wattroff(window[HEADING], COLOR_PAIR(11) | A_BOLD);
+    wattroff(window[HEADING], COLOR_PAIR(BLUE) | A_BOLD);
 
-    wattron(window[HEADING], COLOR_PAIR(13) | A_BOLD);
+    wattron(window[HEADING], COLOR_PAIR(VALUE_PAIR) | A_BOLD);
     mvwprintw(window[HEADING], 8, 6, "%6.1f", degree);
-    wattroff(window[HEADING], COLOR_PAIR(13) | A_BOLD);
+    wattroff(window[HEADING], COLOR_PAIR(VALUE_PAIR) | A_BOLD);
 
     //calculate coordinates
     bias = (int) (degree / 6);
     //data is at top line,0~60
     if ((bias >= 0) && (bias <= 9)) {
-        wattron(window[HEADING], COLOR_PAIR(12) | A_BOLD);
+        wattron(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
         mvwaddch(window[HEADING], 0, 9 + bias, ACS_DIAMOND);
-        wattroff(window[HEADING], COLOR_PAIR(12) | A_BOLD);
+        wattroff(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
     }
     //data is at right line 60~126
     if ((bias >= 10) && (bias <= 20)) {
-        wattron(window[HEADING], COLOR_PAIR(12) | A_BOLD);
+        wattron(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
         mvwaddch(window[HEADING], zero_y + bias - 9, zero_x + 9, ACS_DIAMOND);
-        wattroff(window[HEADING], COLOR_PAIR(12) | A_BOLD);
+        wattroff(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
     }
     //data is at bottom line 132~180
     if ((bias >= 21) && (bias <= 30)) {
-        wattron(window[HEADING], COLOR_PAIR(12) | A_BOLD);
+        wattron(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
         mvwaddch(window[HEADING], zero_y + 12, 18 - (bias - 20), ACS_DIAMOND);
-        wattroff(window[HEADING], COLOR_PAIR(12) | A_BOLD);
+        wattroff(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
     }
     //data is at bottom line 180~234
     if ((bias >= 31) && (bias <= 39)) {
-        wattron(window[HEADING], COLOR_PAIR(12) | A_BOLD);
+        wattron(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
         mvwaddch(window[HEADING], zero_y + 12, 9 + (-bias + 30), ACS_DIAMOND);
-        wattroff(window[HEADING], COLOR_PAIR(12) | A_BOLD);
+        wattroff(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
     }
     //data is at left line 240~-300
     if ((bias >= 40) && (bias <= 50)) {
-        wattron(window[HEADING], COLOR_PAIR(12) | A_BOLD);
+        wattron(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
         mvwaddch(window[HEADING], 12 + (-bias + 39), 0, ACS_DIAMOND);
-        wattroff(window[HEADING], COLOR_PAIR(12) | A_BOLD);
+        wattroff(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
     }
 
     //data is at left line 306~-360
     if ((bias >= 51) && (bias <= 60)) {
-        wattron(window[HEADING], COLOR_PAIR(12) | A_BOLD);
+        wattron(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
         mvwaddch(window[HEADING], 0, bias - 51, ACS_DIAMOND);
-        wattroff(window[HEADING], COLOR_PAIR(12) | A_BOLD);
+        wattroff(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
     }
 }
 
 static void show_vertical_speed(float height) {
-    wattron(window[HEIGHT], COLOR_PAIR(11) | A_BOLD);
+    wattron(window[HEIGHT], COLOR_PAIR(BLUE) | A_BOLD);
     mvwprintw(window[HEIGHT], 0, 0, "VERT SPEED");
-    wattroff(window[HEIGHT], COLOR_PAIR(11) | A_BOLD);
+    wattroff(window[HEIGHT], COLOR_PAIR(BLUE) | A_BOLD);
 
-    wattron(window[HEIGHT], COLOR_PAIR(13) | A_BOLD);
+    wattron(window[HEIGHT], COLOR_PAIR(VALUE_PAIR) | A_BOLD);
     mvwprintw(window[HEIGHT], 1, 0, "%6.1f m/s", height);
-    wattroff(window[HEIGHT], COLOR_PAIR(13) | A_BOLD);
+    wattroff(window[HEIGHT], COLOR_PAIR(VALUE_PAIR) | A_BOLD);
 }
 
 static void show_speed(float speed) {
-    wattron(window[SPEED], COLOR_PAIR(11) | A_BOLD);
+    wattron(window[SPEED], COLOR_PAIR(BLUE) | A_BOLD);
     mvwprintw(window[SPEED], 0, 3, "SPEED");
-    wattroff(window[SPEED], COLOR_PAIR(11) | A_BOLD);
+    wattroff(window[SPEED], COLOR_PAIR(BLUE) | A_BOLD);
 
-    wattron(window[SPEED], COLOR_PAIR(13) | A_BOLD);
+    wattron(window[SPEED], COLOR_PAIR(VALUE_PAIR) | A_BOLD);
     mvwprintw(window[SPEED], 1, 0, "%6.1f km/h", speed);
-    wattroff(window[SPEED], COLOR_PAIR(13) | A_BOLD);
+    wattroff(window[SPEED], COLOR_PAIR(VALUE_PAIR) | A_BOLD);
 }
 
 static void show_target(target_t *target) {
@@ -227,33 +227,33 @@ static void init_windows(void) {
     info_y = (max_y - info_height) / 2;
     window[INFO] = newwin(info_height, info_width, info_y, info_x);
     box(window[INFO], 0, 0);
-    wattron(window[INFO], COLOR_PAIR(1));
+    wattron(window[INFO], COLOR_PAIR(RED));
     mvwprintw(window[INFO], 1, 2, "Multi SDR GPS Simulator");
-    wattroff(window[INFO], COLOR_PAIR(1));
-    wattron(window[INFO], COLOR_PAIR(2));
-    mvwprintw(window[INFO], 3, 2, "https://github.com/Mictronics/multi-sdr-gps");
-    mvwprintw(window[INFO], 4, 2, "(c) Mictronics 2021");
+    wattroff(window[INFO], COLOR_PAIR(RED));
+    wattron(window[INFO], COLOR_PAIR(GREEN));
+    mvwprintw(window[INFO], 3, 2, "https://github.com/Mictronics/multi-sdr-gps-sim");
+    mvwprintw(window[INFO], 4, 2, "(c) Mictronics 2026");
     mvwprintw(window[INFO], 5, 2, "Distributed under the MIT License");
     mvwprintw(window[INFO], 7, 2, "Based on work from Takuji Ebinuma (gps-sdr-sim)");
     mvwprintw(window[INFO], 8, 2, "and IvanKor.");
     mvwprintw(window[INFO], info_height - 2, 2, "Press any key to return.");
-    wattroff(window[INFO], COLOR_PAIR(2));
+    wattroff(window[INFO], COLOR_PAIR(GREEN));
 
     /* setup help window */
     info_x = (max_x - help_width) / 2;
     info_y = (max_y - help_height) / 2;
     window[HELP] = newwin(help_height, help_width, info_y, info_x);
     box(window[HELP], 0, 0);
-    wattron(window[HELP], COLOR_PAIR(1));
+    wattron(window[HELP], COLOR_PAIR(RED));
     mvwprintw(window[HELP], 1, 2, "Help");
-    wattroff(window[HELP], COLOR_PAIR(1));
+    wattroff(window[HELP], COLOR_PAIR(RED));
     mvwprintw(window[HELP], 2, 2, "w   Increase altitude     i    Info");
-    mvwprintw(window[HELP], 3, 2, "s   Decrease altitude     h    Help");
+    mvwprintw(window[HELP], 3, 2, "s   Decrease altitude     h ?  Help");
     mvwprintw(window[HELP], 4, 2, "d   Heading right         x    Exit");
-    mvwprintw(window[HELP], 5, 2, "a   Heading left          F1   Setup Window");
-    mvwprintw(window[HELP], 6, 2, "e   Increase speed        F2   Status Window");
-    mvwprintw(window[HELP], 7, 2, "q   Decrease speed        F3   Position Window");
-    mvwprintw(window[HELP], 8, 2, "t   Increase TX gain");
+    mvwprintw(window[HELP], 5, 2, "a   Heading left          F1   Setup");
+    mvwprintw(window[HELP], 6, 2, "e   Increase speed        F2   Status");
+    mvwprintw(window[HELP], 7, 2, "q   Decrease speed        F3   Dynamic Position");
+    mvwprintw(window[HELP], 8, 2, "t   Increase TX gain      TAB  Next display");
     mvwprintw(window[HELP], 9, 2, "g   Decrease TX gain");
 
     /* Attach a panel to each window
@@ -321,16 +321,13 @@ void gui_init(bool no_tui) {
     keypad(stdscr, TRUE);
     nodelay(stdscr, TRUE); // gui_getch polls, so it never blocks with gui_lock held
     /* Initialize all the colors */
-    init_pair(1, COLOR_RED, COLOR_BLACK);
-    init_pair(2, COLOR_GREEN, COLOR_BLACK);
-    init_pair(3, COLOR_BLUE, COLOR_BLACK);
-    init_pair(4, COLOR_CYAN, COLOR_BLACK);
-    init_pair(5, COLOR_YELLOW, COLOR_BLACK);
-
-    init_pair(11, COLOR_BLUE, COLOR_BLACK);
-    init_pair(12, COLOR_RED, COLOR_BLACK);
-    init_pair(13, COLOR_RED, COLOR_WHITE);
-    init_pair(14, COLOR_BLACK, COLOR_RED);
+    // Pair numbers are the status_color_t values
+    init_pair(RED, COLOR_RED, COLOR_BLACK);
+    init_pair(GREEN, COLOR_GREEN, COLOR_BLACK);
+    init_pair(BLUE, COLOR_BLUE, COLOR_BLACK);
+    init_pair(CYAN, COLOR_CYAN, COLOR_BLACK);
+    init_pair(YELLOW, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(VALUE_PAIR, COLOR_RED, COLOR_WHITE);
 
     init_windows();
     pthread_mutex_unlock(&gui_lock);
@@ -553,9 +550,9 @@ void gui_show_status(bool tx_on, int gain, bool has_gain, unsigned fifo_fill, un
         snprintf(line, sizeof line, "TX %-3s  FIFO %u/%u", tx_on ? "on" : "off", fifo_fill, fifo_size);
     pthread_mutex_lock(&gui_lock);
     for (window_panel_t p = TRACK; p <= KF_FIX; p++) {
-        wattron(window[p], COLOR_PAIR(5));
+        wattron(window[p], COLOR_PAIR(YELLOW));
         mvwprintw(window[p], 1, 2, "%-40s", line);
-        wattroff(window[p], COLOR_PAIR(5));
+        wattroff(window[p], COLOR_PAIR(YELLOW));
     }
     gui_update();
     pthread_mutex_unlock(&gui_lock);

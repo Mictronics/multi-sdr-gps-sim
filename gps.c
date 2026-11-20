@@ -1756,22 +1756,6 @@ static int readUserMotion(double xyz[USER_MOTION_SIZE][3], const char *filename)
     return (numd);
 }
 
-// Layout of the LS_FIX window: the channel table starts at the left, the
-// scenario information sits in the column on the right.
-#define LS_COL_INFO 40
-#define LS_ROW_NAV 3
-#define LS_ROW_CHAN 4
-#define LS_ROW_XYZ 5
-#define LS_ROW_LLH 6
-#define LS_ROW_DURATION 7
-#define LS_ROW_RINEX 8
-#define LS_ROW_ALMANAC 9
-#define LS_ROW_START 10
-#define LS_ROW_SIMTIME 11
-#define LS_COL_SIMTIME 57
-#define LS_ROW_ELAPSED 12
-#define LS_ROW_IONO 14
-
 #define SAMPLE_PERIOD (1.0 / (double) TX_SAMPLERATE)
 
 // Satellites with a record near the start time that make -s now keep the ephemeris unshifted
