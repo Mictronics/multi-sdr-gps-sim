@@ -12,7 +12,11 @@
 
 
 #include <math.h>
+#include <string.h>
 #include "sbas.h"
+
+#define SBAS_NMASK 32 // PRN mask: GPS PRN 1-32, so mask slot i is PRN i + 1
+#define SBAS_IODP 0   // The mask never changes
 
 // gps.gov L1 C/A PRN code assignments, Jan 2026. ASECNA (120, 147) has no slot listed yet.
 const sbas_geo_t sbas_geo[] = {
@@ -93,4 +97,92 @@ void sbas_mt9(const double *pos, int sec, unsigned char *data) {
     putBits(data, &off, lround(pos[2] / 0.4), 25);      // ZG, 0.4 m
     while (off < SBAS_DATA_BITS) // rates 17, 17, 18, accelerations 10, 10, 10, aGf0 12, aGf1 8
         data[off++] = 0;
+}
+
+// MT1: PRN mask
+static void mt1(unsigned char *data) {
+    int off = 0;
+    for (int i = 0; i < 210; i++)
+        data[off++] = i < SBAS_NMASK;
+    putBits(data, &off, SBAS_IODP, 2);
+}
+
+// MT2-4: fast corrections of mask slots 13 * (type - 2) on; PRC 0, UDREI 5 (3.0 m) or 14 (not monitored)
+static void mt2_4(int type, const int *iode, unsigned char *data) {
+    int off = 0, first = 13 * (type - 2);
+
+    putBits(data, &off, 0, 2); // IODF, constant as the corrections never change
+    putBits(data, &off, SBAS_IODP, 2);
+    for (int k = 0; k < 13; k++)
+        putBits(data, &off, 0, 12); // PRC, 0.125 m
+    for (int k = 0; k < 13; k++) {
+        int slot = first + k;
+        putBits(data, &off, slot >= SBAS_NMASK ? 0 : (iode[slot] >= 0 ? 5 : 14), 4); // unused slots 0, as EGNOS
+    }
+}
+
+// MT7: fast correction degradation, the values EGNOS sends (t_lat 3 s, ai 15 for masked slots)
+static void mt7(unsigned char *data) {
+    int off = 0;
+    putBits(data, &off, 3, 4);
+    putBits(data, &off, SBAS_IODP, 2);
+    putBits(data, &off, 0, 2);
+    for (int k = 0; k < 51; k++)
+        putBits(data, &off, k < SBAS_NMASK ? 15 : 0, 4);
+}
+
+// MT10: degradation parameters, copied from EGNOS (2026-11-20); the remaining 81 bits are spare
+static void mt10(unsigned char *data) {
+    static const int len[16] = {10, 10, 10, 9, 10, 9, 10, 10, 9, 6, 10, 9, 10, 1, 1, 7};
+    static const int val[16] = {0, 179, 156, 120, 479, 120, 354, 400, 120, 0, 657, 300, 0, 0, 0, 0};
+    int off = 0;
+    for (int k = 0; k < 16; k++)
+        putBits(data, &off, val[k], len[k]);
+}
+
+// MT25 number k (0-7): long term corrections of mask slots 4k to 4k+3, all deltas 0, IODE of the
+// ephemeris being sent; a slot without ephemeris gets mask number 0 (no satellite)
+static void mt25(int k, const int *iode, unsigned char *data) {
+    int off = 0;
+    for (int half = 0; half < 2; half++) {
+        putBits(data, &off, 0, 1); // velocity code 0: two satellites, no rates
+        for (int j = 0; j < 2; j++) {
+            int slot = 4 * k + 2 * half + j;
+            putBits(data, &off, iode[slot] >= 0 ? slot + 1 : 0, 6);
+            putBits(data, &off, iode[slot] >= 0 ? iode[slot] : 0, 8);
+            putBits(data, &off, 0, 9 + 9 + 9 + 10); // dx, dy, dz, da_f0
+        }
+        putBits(data, &off, SBAS_IODP, 2);
+        putBits(data, &off, 0, 1);
+    }
+}
+
+/* Data field of the message sent at second of week sec, returns its type. iode[sv] is the IODE
+ * of GPS PRN sv + 1, -1 without ephemeris; pos is the GEO for MT9 (ECEF, m).
+ * Every 6 s MT2, MT3, MT4, then three slots from a 60 s list: MT1 twice, all 8 MT25, MT9, MT7, MT10.
+ * ponytail: zero corrections; MT18/MT26 (ionosphere) come with phase 5. */
+int sbas_message(int sec, const int *iode, const double *pos, unsigned char *data) {
+    static const int rest[30] = {1, 25, 25, 25, 25, 9, 7, 10, 25, 25, 25, 25, 63, 63, 63,
+                                 1, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63};
+    int s = sec % 60, type, n25 = 0;
+
+    if (s % 6 < 3) {
+        type = 2 + s % 6;
+    } else {
+        int idx = (s / 6) * 3 + s % 6 - 3;
+        type = rest[idx];
+        for (int i = 0; i < idx; i++) // which of the 8 MT25 this is
+            n25 += rest[i] == 25;
+    }
+    memset(data, 0, SBAS_DATA_BITS);
+    switch (type) {
+        case 1: mt1(data); break;
+        case 2: case 3: case 4: mt2_4(type, iode, data); break;
+        case 7: mt7(data); break;
+        case 9: sbas_mt9(pos, sec, data); break;
+        case 10: mt10(data); break;
+        case 25: mt25(n25, iode, data); break;
+        default: break; // 63: null message
+    }
+    return type;
 }

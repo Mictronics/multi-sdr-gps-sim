@@ -72,6 +72,57 @@ int main(void) {
     expect("MT9 ZG", bitsToInt(data + 85, 25), 0);
     expect("MT9 rest is 0", bitsToInt(data + 110, 60) | bitsToInt(data + 170, 42), 0);
 
+    // One minute of messages: MT2-4 every 6 s, MT1, MT9, MT7, MT10 and all 8 MT25, IODP 0 everywhere
+    int iode[32], seen25[33] = {0}, count[64] = {0};
+    for (int sv = 0; sv < 32; sv++)
+        iode[sv] = (sv % 5 == 3) ? -1 : (sv * 7 + 1) % 256; // some PRNs without ephemeris
+    for (int sec = 120; sec < 180; sec++) {
+        int type = sbas_message(sec, iode, pos, data);
+        count[type]++;
+        if (sec % 6 < 3)
+            expect("MT2/3/4 at sec % 6 = 0/1/2", type, 2 + sec % 6);
+        if (type >= 2 && type <= 4) {
+            expect("MT2-4 IODP", bitsToInt(data + 2, 2), 0);
+            expect("MT2-4 PRC all 0", bitsToInt(data + 4, 52) | bitsToInt(data + 56, 52) | bitsToInt(data + 108, 52), 0);
+            for (int k = 0; k < 13; k++) {
+                int slot = 13 * (type - 2) + k;
+                unsigned long want = slot >= 32 ? 0 : (iode[slot] >= 0 ? 5 : 14);
+                expect("MT2-4 UDREI", bitsToInt(data + 160 + 4 * k, 4), want);
+            }
+        } else if (type == 1) {
+            expect("MT1 mask PRN 1-32", bitsToInt(data, 32), 0xFFFFFFFFUL);
+            expect("MT1 mask rest 0", bitsToInt(data + 32, 60) | bitsToInt(data + 92, 60) | bitsToInt(data + 152, 58), 0);
+            expect("MT1 IODP", bitsToInt(data + 210, 2), 0);
+        } else if (type == 7) {
+            expect("MT7 t_lat", bitsToInt(data, 4), 3);
+            expect("MT7 ai slot 1", bitsToInt(data + 8, 4), 15);
+            expect("MT7 ai slot 33", bitsToInt(data + 8 + 4 * 32, 4), 0);
+        } else if (type == 10) {
+            expect("MT10 Cltc_lsb", bitsToInt(data + 10, 10), 179);
+            expect("MT10 iiono", bitsToInt(data + 103, 9), 300);
+        } else if (type == 25) {
+            for (int h = 0; h < 212; h += 106) {
+                expect("MT25 velocity code", data[h], 0);
+                expect("MT25 IODP", bitsToInt(data + h + 103, 2), 0);
+                for (int j = 0; j < 2; j++) {
+                    int o = h + 1 + 51 * j, slot = (int) bitsToInt(data + o, 6);
+                    if (slot > 0) {
+                        seen25[slot]++;
+                        expect("MT25 IODE", bitsToInt(data + o + 6, 8), (unsigned long) iode[slot - 1]);
+                        expect("MT25 deltas 0", bitsToInt(data + o + 14, 37), 0);
+                    }
+                }
+            }
+        }
+    }
+    expect("MT1 per minute", count[1], 2);
+    expect("MT9 per minute", count[9], 1);
+    expect("MT7 per minute", count[7], 1);
+    expect("MT10 per minute", count[10], 1);
+    expect("MT25 per minute", count[25], 8);
+    for (int sv = 0; sv < 32; sv++)
+        expect("MT25 once per PRN with ephemeris", seen25[sv + 1], iode[sv] >= 0 ? 1 : 0);
+
     printf(failures ? "%d FAILURES\n" : "all checks passed\n", failures);
     return failures != 0;
 }

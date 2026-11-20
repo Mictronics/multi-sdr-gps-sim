@@ -35,6 +35,7 @@ extern const int sbas_geo_count;
 unsigned long sbas_crc24q(const unsigned char *bits, int n);
 void sbas_frame(int type, const unsigned char *data, int sec, unsigned char *msg);
 void sbas_mt9(const double *pos, int sec, unsigned char *data);
+int sbas_message(int sec, const int *iode, const double *pos, unsigned char *data);
 void sbas_encode(unsigned *state, const unsigned char *bits, int n, unsigned char *sym);
 
 #endif /* SBAS_H */
