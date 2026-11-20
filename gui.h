@@ -19,8 +19,8 @@
 #define COL_THRD 120
 #define HEAD_HEIGHT 13
 #define HEAD_WIDTH 19
-#define HEAD_Y 12
-#define HEAD_X 14
+#define HEAD_Y 4  // Right of Location and Target, rows 4-16 stay above the status separator at 31 rows
+#define HEAD_X 72 // Speed at HEAD_X-12, vertical speed at HEAD_X+20 (cols 60-103)
 #define STATUS_HEIGHT 10
 
 // Layout of the LS_FIX window: the channel table starts at the left, the
