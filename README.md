@@ -25,7 +25,7 @@ __Note__
 The SDR internal oscillator must be precise enough (frequency offset) and stable (temperature drift) for GPS signal generation.
 Ideally the SDR shall be clocked from either by TCXO or more expensive (but highest precision) OCXO.
 
-Best experience with HackRF.
+Best results with an SDR clocked by a TCXO or OCXO; see the comparison under *Hardware test and practical notes*.
 
 ### Build instructions
 
@@ -230,9 +230,11 @@ All three SDRs were compared on a u-blox NEO-M8T over the same cable (60 dB, DC 
 
 | SDR | Setting | C/N0 | Fix error (horizontal, height) | Residuals |
 |---|---|---|---|---|
-| ADALM-Pluto | `-g -45` | 32-42 dB-Hz | 0.2 m, +1.8 m | -1.2 to +0.8 m |
-| LimeSDR Mini | `-g 10` | 36-45 dB-Hz | 0.5 m, +0.7 m | -1.4 to +2.5 m |
-| HackRF One | `-g 20` | 37-47 dB-Hz | 1.7 m, +3.4 m | -4.6 to +9.6 m |
+| ADALM-Pluto (OCXO mod) | `-g -45` | 32-42 dB-Hz | 0.2 m, +1.8 m | -1.2 to +0.8 m |
+| LimeSDR Mini v1 (stock VCTCXO) | `-g 10` | 36-45 dB-Hz | 0.5 m, +0.7 m | -1.4 to +2.5 m |
+| HackRF One (OCXO mod) | `-g 20` | 37-47 dB-Hz | 1.7 m, +3.4 m | -4.6 to +9.6 m |
+
+The Pluto and the HackRF used here are modified with an OCXO; a stock unit's crystal is less precise and less stable (see the note at the top), so expect them to do worse without such a mod or an external reference. The LimeSDR Mini ran from its own VCTCXO.
 
 On all three, weak low satellites read slightly long and strong high ones slightly short, most on the HackRF. A badly seated SMA connector once cost about 10 dB and gave the HackRF errors of up to 34 m (a 15-21 m fix error): if the level drops at an unchanged gain, reseat the connectors before looking for other causes.
 
