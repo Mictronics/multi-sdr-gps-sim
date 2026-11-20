@@ -10,6 +10,7 @@
  *
  */
 #include <stdio.h>
+#include <math.h>
 #include <termios.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -95,69 +96,34 @@ static void ls_show_header(void) {
     wattroff(window[LS_FIX], COLOR_PAIR(GREEN));
 }
 
+/* Compass box: about square on screen, as a cell is roughly twice as tall as wide. */
 static void show_heading(float degree) {
-    int bias;
-    int zero_y = 0; //coordinates of zero
-    int zero_x = 9;
+    const int cy = HEAD_HEIGHT / 2, cx = HEAD_WIDTH / 2;
+    WINDOW *w = window[HEADING];
 
-    //draw window outline
-    wborder(window[HEADING], '.', '.', '.', '.', '.', '.', '.', '.');
+    wborder(w, '.', '.', '.', '.', '.', '.', '.', '.');
+    mvwaddch(w, 0, cx, ACS_UARROW);
+    mvwprintw(w, 1, cx, "0");
+    mvwprintw(w, cy, 0, "<270");
+    mvwprintw(w, cy, HEAD_WIDTH - 3, "90>");
+    mvwprintw(w, HEAD_HEIGHT - 2, cx - 1, "180");
+    mvwaddch(w, HEAD_HEIGHT - 1, cx, ACS_DARROW);
+    mvwaddch(w, cy, cx, ACS_DIAMOND);
+    wattron(w, COLOR_PAIR(BLUE) | A_BOLD);
+    mvwprintw(w, 2, cx - 4, "DIRECTION");
+    wattroff(w, COLOR_PAIR(BLUE) | A_BOLD);
+    wattron(w, COLOR_PAIR(VALUE_PAIR) | A_BOLD);
+    mvwprintw(w, cy + 2, cx - 3, "%6.1f", degree);
+    wattroff(w, COLOR_PAIR(VALUE_PAIR) | A_BOLD);
 
-    mvwaddch(window[HEADING], 0, 9, ACS_UARROW);
-    mvwprintw(window[HEADING], 1, 9, "0");
-    mvwprintw(window[HEADING], 6, 0, "<270");
-    mvwprintw(window[HEADING], 6, 16, "90>");
-    mvwprintw(window[HEADING], 11, 8, "180");
-    mvwaddch(window[HEADING], 12, 9, ACS_DARROW);
-    mvwaddch(window[HEADING], 6, 9, ACS_DIAMOND);
-    //show window title
-    wattron(window[HEADING], COLOR_PAIR(BLUE) | A_BOLD);
-    mvwprintw(window[HEADING], 4, 6, "DIRECTION");
-    wattroff(window[HEADING], COLOR_PAIR(BLUE) | A_BOLD);
-
-    wattron(window[HEADING], COLOR_PAIR(VALUE_PAIR) | A_BOLD);
-    mvwprintw(window[HEADING], 8, 6, "%6.1f", degree);
-    wattroff(window[HEADING], COLOR_PAIR(VALUE_PAIR) | A_BOLD);
-
-    //calculate coordinates
-    bias = (int) (degree / 6);
-    //data is at top line,0~60
-    if ((bias >= 0) && (bias <= 9)) {
-        wattron(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
-        mvwaddch(window[HEADING], 0, 9 + bias, ACS_DIAMOND);
-        wattroff(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
-    }
-    //data is at right line 60~126
-    if ((bias >= 10) && (bias <= 20)) {
-        wattron(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
-        mvwaddch(window[HEADING], zero_y + bias - 9, zero_x + 9, ACS_DIAMOND);
-        wattroff(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
-    }
-    //data is at bottom line 132~180
-    if ((bias >= 21) && (bias <= 30)) {
-        wattron(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
-        mvwaddch(window[HEADING], zero_y + 12, 18 - (bias - 20), ACS_DIAMOND);
-        wattroff(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
-    }
-    //data is at bottom line 180~234
-    if ((bias >= 31) && (bias <= 39)) {
-        wattron(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
-        mvwaddch(window[HEADING], zero_y + 12, 9 + (-bias + 30), ACS_DIAMOND);
-        wattroff(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
-    }
-    //data is at left line 240~-300
-    if ((bias >= 40) && (bias <= 50)) {
-        wattron(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
-        mvwaddch(window[HEADING], 12 + (-bias + 39), 0, ACS_DIAMOND);
-        wattroff(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
-    }
-
-    //data is at left line 306~-360
-    if ((bias >= 51) && (bias <= 60)) {
-        wattron(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
-        mvwaddch(window[HEADING], 0, bias - 51, ACS_DIAMOND);
-        wattroff(window[HEADING], COLOR_PAIR(RED) | A_BOLD);
-    }
+    // Where a ray from the centre meets the frame, in on-screen units (rows count double)
+    double a = degree * M_PI / 180.0, dx = sin(a), dy = -cos(a);
+    double hx = cx, hy = 2.0 * cy;
+    double t = fabs(dx) * hy > fabs(dy) * hx ? hx / fabs(dx) : hy / fabs(dy);
+    int col = cx + (int) lround(dx * t), row = cy + (int) lround(dy * t / 2.0);
+    wattron(w, COLOR_PAIR(RED) | A_BOLD);
+    mvwaddch(w, row, col, ACS_DIAMOND);
+    wattroff(w, COLOR_PAIR(RED) | A_BOLD);
 }
 
 static void show_vertical_speed(float height) {
@@ -207,10 +173,10 @@ static void init_windows(void) {
     window[HEADING] = subwin(window[KF_FIX], HEAD_HEIGHT, HEAD_WIDTH, HEAD_Y, HEAD_X);
     syncok(window[HEADING], TRUE);
     show_heading(0);
-    window[HEIGHT] = subwin(window[KF_FIX], 2, 12, HEAD_Y + 6, HEAD_X + 20);
+    window[HEIGHT] = subwin(window[KF_FIX], 2, 12, HEAD_Y + HEAD_HEIGHT / 2 - 1, HEAD_X + 20);
     syncok(window[HEIGHT], TRUE);
     show_vertical_speed(0);
-    window[SPEED] = subwin(window[KF_FIX], 2, 12, HEAD_Y + 6, HEAD_X - 12);
+    window[SPEED] = subwin(window[KF_FIX], 2, 12, HEAD_Y + HEAD_HEIGHT / 2 - 1, HEAD_X - 12);
     syncok(window[SPEED], TRUE);
     show_speed(0);
     window[TARGET] = subwin(window[KF_FIX], 7, 26, 4, 30);

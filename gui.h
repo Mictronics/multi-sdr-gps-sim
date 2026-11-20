@@ -17,9 +17,9 @@
 
 #define ROW_THRD 31 // LS_FIX table ends at row 18 (12 GPS + 3 SBAS), above the status separator at rows - 12
 #define COL_THRD 120
-#define HEAD_HEIGHT 13
+#define HEAD_HEIGHT 9
 #define HEAD_WIDTH 19
-#define HEAD_Y 4  // Right of Location and Target, rows 4-16 stay above the status separator at 31 rows
+#define HEAD_Y 4  // Right of Location and Target, rows 4-12 stay above the status separator at 31 rows
 #define HEAD_X 72 // Speed at HEAD_X-12, vertical speed at HEAD_X+20 (cols 60-103)
 #define STATUS_HEIGHT 10
 
