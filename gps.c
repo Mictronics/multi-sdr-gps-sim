@@ -2416,7 +2416,8 @@ static struct iq_buf *queueSamples(const gps_ctx_t *c, struct iq_buf *iq) {
         if (sim->sample_size == SC16) {
             iq->data16[iq->validLength] = c->iq_buff[isamp];
         } else {
-            iq->data8[iq->validLength] = c->iq_buff[isamp] >> 4;
+            int v = c->iq_buff[isamp] >> 4; // clip: a cast to signed char would wrap
+            iq->data8[iq->validLength] = (signed char) (v > 127 ? 127 : (v < -128 ? -128 : v));
         }
         iq->validLength += 1;
         if (sim->sdr_type == SDR_HACKRF) {
