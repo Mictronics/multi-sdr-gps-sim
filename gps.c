@@ -113,23 +113,35 @@ static double normVect(const double *x) {
 }
 
 /* Generate the C/A code sequence for a given Satellite Vehicle PRN
- * prn PRN number of the Satellite Vehicle
+ * prn PRN number, 1-32 (GPS) or 120-158 (SBAS)
  * ca Caller-allocated integer array of 1023 bytes
  */
-static void codegen(int *ca, int prn) {
+void codegen(int *ca, int prn) {
     int delay[] = {
         5, 6, 7, 8, 17, 18, 139, 140, 141, 251,
         252, 254, 255, 256, 257, 258, 469, 470, 471, 472,
         473, 474, 509, 512, 513, 514, 515, 516, 859, 860,
         861, 862
     };
+    // gps.gov L1 C/A PRN code assignments, Jan 2026
+    static const int sbas_delay[] = {
+        145, 175, 52, 21, 237, 235, 886, 657, 634, 762,
+        355, 1012, 176, 603, 130, 359, 595, 68, 386, 797,
+        456, 499, 883, 307, 127, 211, 121, 118, 163, 628,
+        853, 484, 289, 811, 202, 1021, 463, 568, 904
+    };
+    int d;
 
     int g1[CA_SEQ_LEN], g2[CA_SEQ_LEN];
     int r1[N_DWRD_SBF], r2[N_DWRD_SBF];
     int c1, c2;
     int i, j;
 
-    if (prn < 1 || prn > 32)
+    if (prn >= 1 && prn <= 32)
+        d = delay[prn - 1];
+    else if (prn >= 120 && prn <= 158)
+        d = sbas_delay[prn - 120];
+    else
         return;
 
     for (i = 0; i < N_DWRD_SBF; i++)
@@ -149,7 +161,7 @@ static void codegen(int *ca, int prn) {
         r2[0] = c2;
     }
 
-    for (i = 0, j = CA_SEQ_LEN - delay[prn - 1]; i < CA_SEQ_LEN; i++, j++)
+    for (i = 0, j = CA_SEQ_LEN - d; i < CA_SEQ_LEN; i++, j++)
         ca[i] = (1 - g1[i] * g2[j % CA_SEQ_LEN]) / 2;
 
     return;
