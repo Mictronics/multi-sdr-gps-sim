@@ -168,6 +168,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
         case 703: // --disable-sbas
             simulator.sbas_enable = false;
             break;
+        case 705: // --no-tui
+            simulator.headless = true;
+            break;
         case 704: // --sbas
             if (sscanf(arg, "%d,%lf", &simulator.sbas_prn, &simulator.sbas_lon) != 2 ||
                     simulator.sbas_prn < SBAS_PRN_MIN || simulator.sbas_prn > SBAS_PRN_MAX || fabs(simulator.sbas_lon) > 180.0) {
@@ -175,6 +178,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             }
             break;
         case ARGP_KEY_END:
+            if (simulator.headless && simulator.interactive_mode) {
+                argp_error(state, "Interactive mode needs the terminal UI, drop --no-tui.");
+            }
             if (state->arg_num > 0)
                 /* We use only options but no arguments */
                 argp_usage(state);
@@ -292,7 +298,7 @@ int main(int argc, char** argv) {
     if (simulator.use_ftp) {
         curl_global_init(CURL_GLOBAL_DEFAULT); // Once, before any thread uses curl
     }
-    gui_init();
+    gui_init(simulator.headless);
     // No access to GUI until this point
 
     if (simulator.interactive_mode && simulator.motion_file_name != NULL) {
@@ -341,7 +347,11 @@ int main(int argc, char** argv) {
         if (simulator.gps_thread_exit && !tx_off && fifo_is_empty()) {
             sdr_close();
             tx_off = true;
-            gui_status_wprintw(GREEN, "Transmitter off, press 'x' to exit.\n");
+            if (simulator.headless) {
+                simulator.main_exit = true;
+            } else {
+                gui_status_wprintw(GREEN, "Transmitter off, press 'x' to exit.\n");
+            }
         }
         ch = gui_getch();
         if (ch != -1) {

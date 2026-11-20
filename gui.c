@@ -28,6 +28,7 @@ static const int help_width = 50;
 static const int help_height = 13;
 static int max_x = 0;
 static int max_y = 0;
+static bool headless = false; // --no-tui: no curses, status lines go to stderr
 
 static WINDOW *window[HELP + 1] = {NULL};
 static PANEL *panel[HELP + 1] = {NULL};
@@ -287,9 +288,12 @@ static void init_windows(void) {
     doupdate();
 }
 
-void gui_init(void) {
+void gui_init(bool no_tui) {
     char ch;
     pthread_mutex_init(&gui_lock, NULL);
+    headless = no_tui;
+    if (headless)
+        return;
     pthread_mutex_lock(&gui_lock);
     /* Initialize curses */
     initscr();
@@ -332,6 +336,8 @@ void gui_init(void) {
 void gui_destroy(void) {
     pthread_mutex_unlock(&gui_lock); // Just in case
     pthread_mutex_destroy(&gui_lock);
+    if (headless)
+        return;
     delwin(window[TRACK]);
     delwin(window[LS_FIX]);
     delwin(window[KF_FIX]);
@@ -347,8 +353,20 @@ void gui_destroy(void) {
 }
 
 void gui_mvwprintw(window_panel_t w, int y, int x, const char * fmt, ...) {
-    pthread_mutex_lock(&gui_lock);
     va_list args;
+    if (headless) {
+        // Only the one-time setup lines; LS_FIX is redrawn every update
+        if (w == TRACK) {
+            pthread_mutex_lock(&gui_lock);
+            va_start(args, fmt);
+            vfprintf(stderr, fmt, args);
+            va_end(args);
+            fputc('\n', stderr);
+            pthread_mutex_unlock(&gui_lock);
+        }
+        return;
+    }
+    pthread_mutex_lock(&gui_lock);
     if (wmove(window[w], y, x) == ERR) {
         pthread_mutex_unlock(&gui_lock);
         return;
@@ -366,6 +384,17 @@ void gui_status_wprintw(status_color_t clr, const char * fmt, ...) {
     pthread_mutex_lock(&gui_lock);
     va_list args;
     va_start(args, fmt);
+    if (headless) {
+        char line[512];
+        vsnprintf(line, sizeof line, fmt, args);
+        va_end(args);
+        size_t n = strlen(line);
+        if (n > 0 && line[n - 1] == '\r') // In-place TUI line, e.g. "Gain:"
+            line[n - 1] = '\n';
+        fputs(line, stderr);
+        pthread_mutex_unlock(&gui_lock);
+        return;
+    }
     if (clr > 0) {
         wattron(window[STATUS], COLOR_PAIR(clr));
     }
@@ -379,16 +408,16 @@ void gui_status_wprintw(status_color_t clr, const char * fmt, ...) {
 }
 
 int gui_getch(void) {
-    int ch = getch();
-    /*
-    if (ch != -1) {
-        fprintf(stderr, "%i\n", ch);
+    if (headless) {
+        usleep(100000); // Same pace as the curses timeout(100)
+        return ERR;
     }
-     */
-    return ch;
+    return getch();
 }
 
 void gui_top_panel(window_panel_t p) {
+    if (headless)
+        return;
     pthread_mutex_lock(&gui_lock);
     top_panel(panel[p]);
     panel[TOP] = panel[p];
@@ -400,6 +429,8 @@ void gui_top_panel(window_panel_t p) {
 }
 
 void gui_toggle_current_panel(void) {
+    if (headless)
+        return;
     pthread_mutex_lock(&gui_lock);
     panel[TOP] = (PANEL *) panel_userptr(panel[TOP]);
     top_panel(panel[TOP]);
@@ -411,6 +442,8 @@ void gui_toggle_current_panel(void) {
 }
 
 void gui_show_panel(window_panel_t p, attr_status_t onoff) {
+    if (headless)
+        return;
     pthread_mutex_lock(&gui_lock);
     if (onoff == ON) {
         show_panel(panel[p]);
@@ -422,30 +455,40 @@ void gui_show_panel(window_panel_t p, attr_status_t onoff) {
 }
 
 void gui_show_speed(float speed) {
+    if (headless)
+        return;
     pthread_mutex_lock(&gui_lock);
     show_speed(speed);
     pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_show_heading(float hdg) {
+    if (headless)
+        return;
     pthread_mutex_lock(&gui_lock);
     show_heading(hdg);
     pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_show_vertical_speed(float vs) {
+    if (headless)
+        return;
     pthread_mutex_lock(&gui_lock);
     show_vertical_speed(vs);
     pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_show_location(void *l) {
+    if (headless)
+        return;
     pthread_mutex_lock(&gui_lock);
     show_local((location_t *) (l));
     pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_show_target(void *t) {
+    if (headless)
+        return;
     pthread_mutex_lock(&gui_lock);
     show_target((target_t *) (t));
     pthread_mutex_unlock(&gui_lock);

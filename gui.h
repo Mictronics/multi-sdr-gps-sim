@@ -13,6 +13,8 @@
 #ifndef GUI_H
 #define GUI_H
 
+#include <stdbool.h>
+
 #define ROW_THRD 26
 #define COL_THRD 120
 #define HEAD_HEIGHT 13
@@ -63,7 +65,7 @@ typedef enum
     YELLOW = 5
 } status_color_t;
 
-void gui_init(void);
+void gui_init(bool no_tui);
 int gui_getch(void);
 void gui_destroy(void);
 void gui_mvwprintw(window_panel_t w, int y, int x, const char *fmt, ...);

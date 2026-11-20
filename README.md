@@ -192,6 +192,7 @@ Options:
 --rinex3            -3  Use RINEX v3 navigation data format
 --disable-almanac       Disable transmission of almanac information
 --disable-sbas          Disable the SBAS GEO signals
+--no-tui                No terminal UI: print status to stderr and exit when the simulation ends
 --sbas                  <prn,longitude> Use only this SBAS GEO, e.g. 136,5.0 (default: the GEOs of the highest system in view)
 --help              -?  Give this help list
 --usage                 Give a short usage message

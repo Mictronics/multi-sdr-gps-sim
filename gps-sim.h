@@ -74,6 +74,7 @@ typedef struct
     bool time_overwrite;
     bool almanac_enable;
     bool sbas_enable;
+    bool headless;   // --no-tui: status to stderr, exit when the run ends
     int sbas_prn;    // --sbas: the only GEO used, 0 = chosen from the table
     double sbas_lon; // its orbital slot [deg]
     int duration;
