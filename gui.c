@@ -40,6 +40,15 @@ static void gui_update() {
     doupdate();
 }
 
+// Status and an open Info/Help box stay above the main panel
+static void raise_overlays(void) {
+    top_panel(panel[STATUS]);
+    if (!panel_hidden(panel[INFO]))
+        top_panel(panel[INFO]);
+    if (!panel_hidden(panel[HELP]))
+        top_panel(panel[HELP]);
+}
+
 static void show_footer(WINDOW *win) {
     wattron(win, COLOR_PAIR(2));
     mvwprintw(win, max_y - STATUS_HEIGHT - 2, 10, "TAB or F1-F3 switch displays, 'x' Exit, 'i' Info, 'h' Help");
@@ -68,7 +77,6 @@ static void show_window(WINDOW *win, char *label) {
     mvwprintw(win, 1, startx, "%s", label);
     wattroff(win, COLOR_PAIR(1));
     show_footer(win);
-    doupdate();
 }
 
 //print the header info for LS fix result display
@@ -77,7 +85,6 @@ static void ls_show_header(void) {
     wattron(window[LS_FIX], COLOR_PAIR(2));
     mvwprintw(window[LS_FIX], 3, 1, "PRN  AZ    ELEV  PRange       dIon");
     wattroff(window[LS_FIX], COLOR_PAIR(2));
-    wrefresh(window[TOP]);
 }
 
 static void show_heading(float degree) {
@@ -145,9 +152,6 @@ static void show_heading(float degree) {
         mvwaddch(window[HEADING], 0, bias - 51, ACS_DIAMOND);
         wattroff(window[HEADING], COLOR_PAIR(12) | A_BOLD);
     }
-    if (window[TOP] == window[KF_FIX]) {
-        wrefresh(window[HEADING]);
-    }
 }
 
 static void show_vertical_speed(float height) {
@@ -158,9 +162,6 @@ static void show_vertical_speed(float height) {
     wattron(window[HEIGHT], COLOR_PAIR(13) | A_BOLD);
     mvwprintw(window[HEIGHT], 1, 0, "%6.1f m/s", height);
     wattroff(window[HEIGHT], COLOR_PAIR(13) | A_BOLD);
-    if (window[TOP] == window[KF_FIX]) {
-        wrefresh(window[HEIGHT]);
-    }
 }
 
 static void show_speed(float speed) {
@@ -171,9 +172,6 @@ static void show_speed(float speed) {
     wattron(window[SPEED], COLOR_PAIR(13) | A_BOLD);
     mvwprintw(window[SPEED], 1, 0, "%6.1f km/h", speed);
     wattroff(window[SPEED], COLOR_PAIR(13) | A_BOLD);
-    if (window[TOP] == window[KF_FIX]) {
-        wrefresh(window[SPEED]);
-    }
 }
 
 static void show_target(target_t *target) {
@@ -184,9 +182,6 @@ static void show_target(target_t *target) {
     mvwprintw(window[TARGET], 3, 0, "Height    %9.1f m", target->height);
     mvwprintw(window[TARGET], 4, 0, "Longitude %9.6f deg", target->lon);
     mvwprintw(window[TARGET], 5, 0, "Latitude  %9.6f deg", target->lat);
-    if (window[TOP] == window[KF_FIX]) {
-        wnoutrefresh(window[TARGET]);
-    }
 }
 
 static void show_local(location_t *loc) {
@@ -194,9 +189,6 @@ static void show_local(location_t *loc) {
     mvwprintw(window[LOCATION], 1, 0, "Longitude %9.6f deg", loc->lon);
     mvwprintw(window[LOCATION], 2, 0, "Latitude  %9.6f deg", loc->lat);
     mvwprintw(window[LOCATION], 3, 0, "Height    %9.1f m", loc->height);
-    if (window[TOP] == window[KF_FIX]) {
-        wnoutrefresh(window[LOCATION]);
-    }
 }
 
 static void init_windows(void) {
@@ -207,15 +199,20 @@ static void init_windows(void) {
     window[LS_FIX] = newwin(max_y, max_x, 0, 0);
     window[KF_FIX] = newwin(max_y, max_x, 0, 0);
     window[HEADING] = subwin(window[KF_FIX], HEAD_HEIGHT, HEAD_WIDTH, HEAD_Y, HEAD_X);
+    syncok(window[HEADING], TRUE);
     show_heading(0);
     window[HEIGHT] = subwin(window[KF_FIX], 2, 12, HEAD_Y + 6, HEAD_X + 20);
+    syncok(window[HEIGHT], TRUE);
     show_vertical_speed(0);
     window[SPEED] = subwin(window[KF_FIX], 2, 12, HEAD_Y + 6, HEAD_X - 12);
+    syncok(window[SPEED], TRUE);
     show_speed(0);
     window[TARGET] = subwin(window[KF_FIX], 7, 26, 4, 30);
+    syncok(window[TARGET], TRUE);
     target_t t = {0};
     show_target(&t);
     window[LOCATION] = subwin(window[KF_FIX], 4, 26, 4, 2);
+    syncok(window[LOCATION], TRUE);
     location_t l = {0};
     show_local(&l);
 
@@ -279,6 +276,7 @@ static void init_windows(void) {
     ls_show_header();
     top_panel(panel[TRACK]);
     panel[TOP] = panel[TRACK];
+    top_panel(panel[STATUS]);
 
     // Keep status window scrolling when adding lines
     scrollok(window[STATUS], TRUE);
@@ -316,7 +314,7 @@ void gui_init(bool no_tui) {
     noecho();
     curs_set(0); //no cursor
     keypad(stdscr, TRUE);
-    timeout(100);
+    nodelay(stdscr, TRUE); // gui_getch polls, so it never blocks with gui_lock held
     /* Initialize all the colors */
     init_pair(1, COLOR_RED, COLOR_BLACK);
     init_pair(2, COLOR_GREEN, COLOR_BLACK);
@@ -374,9 +372,7 @@ void gui_mvwprintw(window_panel_t w, int y, int x, const char * fmt, ...) {
     va_start(args, fmt);
     vw_printw(window[w], fmt, args);
     va_end(args);
-    // Refresh only what is printed on top panel, don't care about background
-    // updates.
-    wrefresh(window[TOP]);
+    gui_update();
     pthread_mutex_unlock(&gui_lock);
 }
 
@@ -403,16 +399,21 @@ void gui_status_wprintw(status_color_t clr, const char * fmt, ...) {
         wattroff(window[STATUS], COLOR_PAIR(clr));
     }
     va_end(args);
-    wrefresh(window[STATUS]);
+    gui_update();
     pthread_mutex_unlock(&gui_lock);
 }
 
 int gui_getch(void) {
     if (headless) {
-        usleep(100000); // Same pace as the curses timeout(100)
+        usleep(100000);
         return ERR;
     }
-    return getch();
+    pthread_mutex_lock(&gui_lock);
+    int ch = getch();
+    pthread_mutex_unlock(&gui_lock);
+    if (ch == ERR)
+        usleep(100000); // Poll every 100 ms, outside the lock
+    return ch;
 }
 
 void gui_top_panel(window_panel_t p) {
@@ -421,9 +422,7 @@ void gui_top_panel(window_panel_t p) {
     pthread_mutex_lock(&gui_lock);
     top_panel(panel[p]);
     panel[TOP] = panel[p];
-    window[TOP] = window[p];
-    // Status is alway the top most panel
-    top_panel(panel[STATUS]);
+    raise_overlays();
     gui_update();
     pthread_mutex_unlock(&gui_lock);
 }
@@ -434,9 +433,7 @@ void gui_toggle_current_panel(void) {
     pthread_mutex_lock(&gui_lock);
     panel[TOP] = (PANEL *) panel_userptr(panel[TOP]);
     top_panel(panel[TOP]);
-    window[TOP] = panel_window(panel[TOP]);
-    // Status is alway the top most panel
-    top_panel(panel[STATUS]);
+    raise_overlays();
     gui_update();
     pthread_mutex_unlock(&gui_lock);
 }
@@ -459,6 +456,7 @@ void gui_show_speed(float speed) {
         return;
     pthread_mutex_lock(&gui_lock);
     show_speed(speed);
+    gui_update();
     pthread_mutex_unlock(&gui_lock);
 }
 
@@ -467,6 +465,7 @@ void gui_show_heading(float hdg) {
         return;
     pthread_mutex_lock(&gui_lock);
     show_heading(hdg);
+    gui_update();
     pthread_mutex_unlock(&gui_lock);
 }
 
@@ -475,6 +474,7 @@ void gui_show_vertical_speed(float vs) {
         return;
     pthread_mutex_lock(&gui_lock);
     show_vertical_speed(vs);
+    gui_update();
     pthread_mutex_unlock(&gui_lock);
 }
 
@@ -483,6 +483,7 @@ void gui_show_location(void *l) {
         return;
     pthread_mutex_lock(&gui_lock);
     show_local((location_t *) (l));
+    gui_update();
     pthread_mutex_unlock(&gui_lock);
 }
 
@@ -491,5 +492,6 @@ void gui_show_target(void *t) {
         return;
     pthread_mutex_lock(&gui_lock);
     show_target((target_t *) (t));
+    gui_update();
     pthread_mutex_unlock(&gui_lock);
 }
