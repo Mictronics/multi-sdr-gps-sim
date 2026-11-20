@@ -46,6 +46,9 @@ void fifo_producer_done();
 // Mark the FIFO as halted. Move any buffers in FIFO to the freelist immediately.
 void fifo_halt();
 
+// True when no filled buffer is waiting for the consumer.
+bool fifo_is_empty(void);
+
 // Get an unused buffer from the freelist and return it.
 // Block waiting for a free buffer. Returns NULL if the FIFO is halted.
 struct iq_buf *fifo_acquire(void);

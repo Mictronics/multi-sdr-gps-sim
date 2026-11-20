@@ -100,6 +100,13 @@ void fifo_producer_done() {
     pthread_mutex_unlock(&fifo_mutex);
 }
 
+bool fifo_is_empty(void) {
+    pthread_mutex_lock(&fifo_mutex);
+    bool empty = fifo_head == NULL;
+    pthread_mutex_unlock(&fifo_mutex);
+    return empty;
+}
+
 void fifo_halt() {
     pthread_mutex_lock(&fifo_mutex);
 

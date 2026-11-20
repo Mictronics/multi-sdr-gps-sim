@@ -42,6 +42,7 @@ simulator_t simulator = {
     .gps_init_done = PTHREAD_COND_INITIALIZER,
 };
 static bool gps_thread_started = false;
+static bool tx_off = false; // SDR closed after the simulation ended
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state);
 const char *argp_program_version = "v1.0";
@@ -200,6 +201,10 @@ static void change_bearing(double delta) {
 }
 
 static void change_gain(int delta) {
+    if (tx_off) {
+        gui_status_wprintw(YELLOW, "Transmitter is off.\n");
+        return;
+    }
     int gain = sdr_set_gain(simulator.tx_gain + delta);
     if (gain == SDR_GAIN_UNSUPPORTED) {
         gui_status_wprintw(YELLOW, "This SDR has no gain control.\n");
@@ -332,6 +337,12 @@ int main(int argc, char** argv) {
     }
     // Run this until we get a termination signal.
     while (!simulator.main_exit) {
+        // Otherwise the SDR keeps its LO and TX path on until 'x', carrier on L1 without signal
+        if (simulator.gps_thread_exit && !tx_off && fifo_is_empty()) {
+            sdr_close();
+            tx_off = true;
+            gui_status_wprintw(GREEN, "Transmitter off, press 'x' to exit.\n");
+        }
         ch = gui_getch();
         if (ch != -1) {
             switch (ch) {

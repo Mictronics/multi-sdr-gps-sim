@@ -84,8 +84,10 @@ int sdr_init(simulator_t *simulator) {
     return current->init(simulator);
 }
 
+// Safe to call twice: afterwards the "none" handler takes close and gain changes.
 void sdr_close(void) {
     current->close();
+    current = &sdr_handlers[0];
 }
 
 int sdr_run(void) {
