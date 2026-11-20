@@ -191,6 +191,8 @@ Options:
 --use-ftp           -f  Pull actual RINEX navigation file and almanac from online sources
 --rinex3            -3  Use RINEX v3 navigation data format
 --disable-almanac       Disable transmission of almanac information
+--disable-sbas          Disable the SBAS GEO signals
+--sbas                  <prn,longitude> Use only this SBAS GEO, e.g. 136,5.0 (default: the GEOs of the highest system in view)
 --help              -?  Give this help list
 --usage                 Give a short usage message
 --version           -V  Print program version
@@ -202,6 +204,18 @@ SDR device types (use with --radio or -r option):
     plutosdr
     limesdr
 ````
+
+### SBAS
+
+Besides the GPS satellites the simulator sends SBAS GEO signals on L1 (250 bit/s, rate 1/2 convolutional code, PRN 120-158). By default it picks the system whose GEO stands highest at the user position and sends up to three of its GEOs from the table in `sbas.c` (at 48° N 10° E EGNOS 150, 136 and 121), each at rest in its orbital slot. `--sbas 136,5.0` sends only the given PRN at the given longitude, `--disable-sbas` sends none (the output is then the same as without SBAS support).
+
+The messages carry no real corrections, but everything a receiver needs to use the service:
+
+- PRN mask for GPS 1-32 (MT1), fast corrections of zero with UDRE 3 m for satellites with ephemeris and "not monitored" for the others (MT2-4), long-term corrections of zero with the current IODEs (MT25), degradation parameters (MT7, MT10).
+- GEO navigation message (MT9, not for ranging) and an almanac of the GEOs being sent (MT17).
+- Ionospheric grid around the user (MT18, MT26), computed from the same Klobuchar model that delays the simulated signal, so a receiver's SBAS iono correction matches the delay it sees.
+
+Tested with a u-blox NEO-M8T over a cable with 60 dB of attenuation and a DC block, HackRF at `-g 20`, amplifier off. The receiver decodes every message type, reports the EGNOS service and gets an SBAS fix (horizontal error 15 m, GPS only 21 m on this HackRF chain). Its iono correction agrees with the simulated delay within 0.35 m per satellite. A cold receiver searches one GEO at first and adds the others within a minute of their MT17. Synchronising to the first GEO took from a few seconds to two minutes after a cold start. Phones track the GEOs (a Pixel 4 at about 45 dB-Hz) but Android does not show whether SBAS is used.
 
 ### Hardware test and practical notes
 
