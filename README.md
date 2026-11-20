@@ -215,7 +215,7 @@ The messages carry no real corrections, but everything a receiver needs to use t
 - GEO navigation message (MT9, not for ranging) and an almanac of the GEOs being sent (MT17).
 - Ionospheric grid around the user (MT18, MT26), computed from the same Klobuchar model that delays the simulated signal, so a receiver's SBAS iono correction matches the delay it sees.
 
-Tested with a u-blox NEO-M8T over a cable with 60 dB of attenuation and a DC block, HackRF at `-g 20`, amplifier off. The receiver decodes every message type, reports the EGNOS service and gets an SBAS fix (horizontal error 15 m, GPS only 21 m on this HackRF chain). Its iono correction agrees with the simulated delay within 0.35 m per satellite. A cold receiver searches one GEO at first and adds the others within a minute of their MT17. Synchronising to the first GEO took from a few seconds to two minutes after a cold start. Phones track the GEOs (a Pixel 4 at about 45 dB-Hz) but Android does not show whether SBAS is used.
+Tested with a u-blox NEO-M8T over a cable with 60 dB of attenuation and a DC block, HackRF at `-g 20`, amplifier off. The receiver decodes every message type, reports the EGNOS service and gets an SBAS fix. Its iono correction agrees with the simulated delay within 0.35 m per satellite. A cold receiver searches one GEO at first and adds the others within a minute of their MT17. Synchronising to the first GEO took from a few seconds to two minutes after a cold start. Phones track the GEOs (a Pixel 4 at about 45 dB-Hz) but Android does not show whether SBAS is used.
 
 ### Hardware test and practical notes
 
@@ -225,6 +225,16 @@ Tested with a HackRF One (firmware 2026.01.3) at 3 MS/s, TX gain 14 dB, amplifie
 mkdir -p ~/gps-tx && cd ~/gps-tx
 gps-sim -f -s now -l 48.0,10.0,500 -r hackrf -g 14 -d 1800
 ```
+
+All three SDRs were compared on a u-blox NEO-M8T over the same cable (60 dB, DC block), GPS only, 5 minutes each from a cold start. Residual is the receiver's pseudorange minus the simulated one at the commanded position, per satellite, with the receiver clock removed:
+
+| SDR | Setting | C/N0 | Fix error (horizontal, height) | Residuals |
+|---|---|---|---|---|
+| ADALM-Pluto | `-g -45` | 32-42 dB-Hz | 0.2 m, +1.8 m | -1.2 to +0.8 m |
+| LimeSDR Mini | `-g 10` | 36-45 dB-Hz | 0.5 m, +0.7 m | -1.4 to +2.5 m |
+| HackRF One | `-g 20` | 37-47 dB-Hz | 1.7 m, +3.4 m | -4.6 to +9.6 m |
+
+On all three, weak low satellites read slightly long and strong high ones slightly short, most on the HackRF. A badly seated SMA connector once cost about 10 dB and gave the HackRF errors of up to 34 m (a 15-21 m fix error): if the level drops at an unchanged gain, reseat the connectors before looking for other causes.
 
 - Run it from a separate directory: `-f` overwrites `rinex2.gz`, `rinex3.gz` and `almanac.sem` in the working directory.
 - With `-s now` and a fresh download the ephemeris is used as it is, so the simulated satellites are the ones the almanac puts above the horizon at that place. An old nav file is shifted to the current time instead, which makes the simulated satellites disagree with a real almanac; receivers that use assistance data may then distrust them. Use fresh data for receiver tests.
