@@ -29,6 +29,10 @@ static const int help_height = 13;
 static int max_x = 0;
 static int max_y = 0;
 static bool headless = false; // --no-tui: no curses, status lines go to stderr
+static bool too_small = false; // Terminal below COL_THRD x ROW_THRD after a resize: draw nothing
+
+static const char *const titles[] = {
+    [TRACK] = "GPS Simulator Setup", [LS_FIX] = "GPS Simulation Status", [KF_FIX] = "Dynamic Position"};
 
 static WINDOW *window[HELP + 1] = {NULL};
 static PANEL *panel[HELP + 1] = {NULL};
@@ -36,6 +40,8 @@ static PANEL *panel[HELP + 1] = {NULL};
 static pthread_mutex_t gui_lock; // Mutex to lock access during GUI updates
 
 static void gui_update() {
+    if (too_small)
+        return;
     update_panels();
     doupdate();
 }
@@ -56,7 +62,7 @@ static void show_footer(WINDOW *win) {
 }
 
 /* Show the window with a border and a label */
-static void show_window(WINDOW *win, char *label) {
+static void show_window(WINDOW *win, const char *label) {
     int startx, half_width, str_leng;
 
     half_width = max_x / 2;
@@ -269,9 +275,8 @@ static void init_windows(void) {
     set_panel_userptr(panel[KF_FIX], panel[TRACK]);
 
     //Print title of each window
-    show_window(window[TRACK], "GPS Simulator Setup");
-    show_window(window[LS_FIX], "GPS Simulation Status");
-    show_window(window[KF_FIX], "Dynamic Position");
+    for (window_panel_t p = TRACK; p <= KF_FIX; p++)
+        show_window(window[p], titles[p]);
 
     ls_show_header();
     top_panel(panel[TRACK]);
@@ -331,23 +336,73 @@ void gui_init(bool no_tui) {
     pthread_mutex_unlock(&gui_lock);
 }
 
+// Subwindows before their parent KF_FIX, ncurses refuses to delete a parent first
+static void delete_windows(WINDOW **w, PANEL **p) {
+    static const window_panel_t order[] = {HEADING, HEIGHT, SPEED, TARGET, LOCATION,
+        TRACK, LS_FIX, KF_FIX, INFO, STATUS, HELP};
+    for (size_t i = 0; i < sizeof order / sizeof order[0]; i++) {
+        if (p[order[i]] != NULL)
+            del_panel(p[order[i]]);
+        delwin(w[order[i]]);
+    }
+}
+
 void gui_destroy(void) {
     pthread_mutex_unlock(&gui_lock); // Just in case
     pthread_mutex_destroy(&gui_lock);
     if (headless)
         return;
-    delwin(window[TRACK]);
-    delwin(window[LS_FIX]);
-    delwin(window[KF_FIX]);
-    delwin(window[INFO]);
-    delwin(window[HEADING]);
-    delwin(window[HEIGHT]);
-    delwin(window[SPEED]);
-    delwin(window[TARGET]);
-    delwin(window[LOCATION]);
-    delwin(window[STATUS]);
-    delwin(window[HELP]);
+    delete_windows(window, panel);
     endwin();
+}
+
+/* Rebuild the windows for a new terminal size and keep their contents; call after KEY_RESIZE. */
+void gui_resize(void) {
+    if (headless)
+        return;
+    pthread_mutex_lock(&gui_lock);
+    getmaxyx(stdscr, max_y, max_x);
+    too_small = max_y < ROW_THRD || max_x < COL_THRD;
+    if (too_small) {
+        // ponytail: whatever ncurses cut off while shrinking is gone when the terminal grows back
+        erase();
+        mvprintw(0, 0, "Terminal too small, need %dx%d.", COL_THRD, ROW_THRD);
+        refresh();
+        pthread_mutex_unlock(&gui_lock);
+        return;
+    }
+    WINDOW *old[HELP + 1];
+    PANEL *old_panel[HELP + 1];
+    memcpy(old, window, sizeof old);
+    memcpy(old_panel, panel, sizeof old_panel);
+    window_panel_t top = TRACK;
+    for (window_panel_t p = TRACK; p <= KF_FIX; p++) {
+        if (panel[TOP] == panel[p])
+            top = p;
+    }
+    init_windows();
+    // The whole interior below the title (KF_FIX includes its subwindows), then the frame again
+    for (window_panel_t p = TRACK; p <= KF_FIX; p++) {
+        int oy, ox;
+        getmaxyx(old[p], oy, ox);
+        int last_row = (oy < max_y ? oy : max_y) - 2;
+        int last_col = (ox < max_x ? ox : max_x) - 2;
+        copywin(old[p], window[p], 3, 1, 3, 1, last_row, last_col, FALSE);
+        int old_sep = oy - STATUS_HEIGHT - 2; // Separator and footer row of the old size
+        if (old_sep <= last_row)
+            mvwhline(window[p], old_sep, 1, ' ', max_x - 2);
+        show_window(window[p], titles[p]);
+    }
+    int sy, sx;
+    getmaxyx(old[STATUS], sy, sx);
+    copywin(old[STATUS], window[STATUS], 0, 0, 0, 0, sy - 1, (sx < max_x - 2 ? sx : max_x - 2) - 1, FALSE);
+    delete_windows(old, old_panel);
+    top_panel(panel[top]);
+    panel[TOP] = panel[top];
+    raise_overlays();
+    clearok(curscr, TRUE);
+    gui_update();
+    pthread_mutex_unlock(&gui_lock);
 }
 
 void gui_mvwprintw(window_panel_t w, int y, int x, const char * fmt, ...) {

@@ -68,6 +68,7 @@ typedef enum
 void gui_init(bool no_tui);
 int gui_getch(void);
 void gui_destroy(void);
+void gui_resize(void);
 void gui_mvwprintw(window_panel_t w, int y, int x, const char *fmt, ...);
 void gui_status_wprintw(status_color_t clr, const char *fmt, ...);
 void gui_top_panel(window_panel_t p);

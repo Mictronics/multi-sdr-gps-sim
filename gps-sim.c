@@ -383,6 +383,9 @@ int main(int argc, char** argv) {
                 case KEY_F(3):
                     gui_top_panel(KF_FIX);
                     break;
+                case KEY_RESIZE:
+                    gui_resize();
+                    break;
                 case LEFT_KEY:
                     change_bearing(-127.0);
                     break;
