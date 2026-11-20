@@ -16,7 +16,8 @@
 #include <curl/curl.h>
 #include "gps.h"
 
-#define ALMANAC_DOWNLOAD_SEM_URL "https://celestrak.org/GPS/almanac/SEM/almanac.sem.txt"
+#define ALMANAC_FILE "almanac.sem" // Also the cache of the last valid download
+#define ALMANAC_MIN_SATS 24        // A download with fewer valid satellites is rejected
 
 typedef struct
 {

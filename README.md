@@ -161,7 +161,7 @@ With `-f` the program downloads the ephemeris and almanac over HTTPS, no login n
 
 - RINEX 2 (default): daily GPS broadcast file from the NOAA CORS public bucket (`noaa-cors-pds`), updated about hourly, though its records can lag several hours behind. With `-s now`, a file that does not reach the start time is replaced by the RINEX 3 file below.
 - RINEX 3 (`-3`): merged broadcast file of the day from BKG (`igs.bkg.bund.de`): `BRDC00WRD_S`, built from real-time streams and reaching the current hour, then `BRDC00WRD_R`, then the previous days' files.
-- Almanac: current SEM almanac from Celestrak (`celestrak.org`).
+- Almanac: current SEM almanac from the US Coast Guard (`navcen.uscg.gov`), then Celestrak (`celestrak.org`), then NAVCEN's daily archive for today and up to three days back. Each source gets 20 s and two retries; a reply that is no SEM almanac (an HTML error page, fewer than 24 satellites) is skipped. If every source fails, the `almanac.sem` of an earlier download is used. The status window shows which source was used.
 
 The files are saved as `rinex2.gz`, `rinex3.gz` and `almanac.sem` in the working directory.
 

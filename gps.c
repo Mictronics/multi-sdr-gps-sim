@@ -1636,17 +1636,18 @@ static int download_progress(void *userdata, curl_off_t dltotal, curl_off_t dlno
     return *(const atomic_bool *) userdata ? 1 : 0; // Non-zero aborts the transfer
 }
 
-/* Download url into filename. A failed transfer leaves no partial file.
- * The transfer is aborted when *cancel becomes true. */
-CURLcode download_file(const char *url, const char *filename, const atomic_bool *cancel) {
+/* Download url into filename within timeout seconds. Anything but HTTP 200 fails, and a failed
+ * transfer leaves no partial file. The transfer is aborted when *cancel becomes true. */
+CURLcode download_file(const char *url, const char *filename, long timeout, const atomic_bool *cancel) {
     struct download_target out = {filename, NULL};
     CURLcode res = CURLE_FAILED_INIT;
     CURL *curl = curl_easy_init();
 
     if (curl) {
         curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, DOWNLOAD_USER_AGENT);
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 60L);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1000L); // Give up on stalled transfers
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 15L);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
@@ -1658,6 +1659,11 @@ CURLcode download_file(const char *url, const char *filename, const atomic_bool 
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_download);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &out);
         res = curl_easy_perform(curl);
+        long code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
+        if (res == CURLE_OK && code != 200) {
+            res = CURLE_HTTP_RETURNED_ERROR; // e.g. 204: FAILONERROR only rejects 400 and up
+        }
         curl_easy_cleanup(curl);
     }
 
@@ -1702,7 +1708,7 @@ static CURLcode download_nav_file(bool rinex3, const char *filename, const atomi
             }
             // Retry connection errors: a round-robin DNS name can hand out an unreachable server
             for (int attempt = 0; attempt < 3; attempt++) {
-                res = download_file(url, filename, cancel);
+                res = download_file(url, filename, 60L, cancel);
                 if (res == CURLE_OK) {
                     gui_status_wprintw(GREEN, "Downloaded %s\n", url);
                     return res;
