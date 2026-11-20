@@ -145,7 +145,13 @@ error:
  *  
  */
 CURLcode almanac_download(const atomic_bool *cancel) {
-    CURLcode res = download_file(ALMANAC_DOWNLOAD_SEM_URL, "almanac.sem", cancel);
+    CURLcode res;
+    // Celestrak sometimes stalls a request; retry like the nav file download
+    for (int attempt = 0; attempt < 3; attempt++) {
+        res = download_file(ALMANAC_DOWNLOAD_SEM_URL, "almanac.sem", cancel);
+        if (res != CURLE_OPERATION_TIMEDOUT && res != CURLE_COULDNT_CONNECT && res != CURLE_COULDNT_RESOLVE_HOST)
+            break;
+    }
     if (res != CURLE_OK) {
         return res;
     }
