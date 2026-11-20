@@ -52,7 +52,8 @@ typedef struct {
 void sbas_mt9(const double *pos, int sec, unsigned char *data);
 int sbas_igp(int band, int bit, double *lat, double *lon);
 void sbas_iono_mask(double lat, double lon, sbas_iono_t *ion);
-int sbas_message(int sec, const int *iode, const double *pos, const sbas_iono_t *ion, unsigned char *data);
+int sbas_message(int sec, const int *iode, const double *pos, const sbas_iono_t *ion,
+        const sbas_geo_t *geos, int ngeo, unsigned char *data);
 void sbas_encode(unsigned *state, const unsigned char *bits, int n, unsigned char *sym);
 
 #endif /* SBAS_H */

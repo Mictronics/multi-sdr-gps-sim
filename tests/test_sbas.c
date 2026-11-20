@@ -83,7 +83,7 @@ int main(void) {
     for (int sv = 0; sv < 32; sv++)
         iode[sv] = (sv % 5 == 3) ? -1 : (sv * 7 + 1) % 256; // some PRNs without ephemeris
     for (int sec = 120; sec < 180; sec++) {
-        int type = sbas_message(sec, iode, pos, NULL, data);
+        int type = sbas_message(sec, iode, pos, NULL, NULL, 0, data);
         count[type]++;
         if (sec % 6 < 3)
             expect("MT2/3/4 at sec % 6 = 0/1/2", type, 2 + sec % 6);
@@ -162,7 +162,7 @@ int main(void) {
     // MT18/MT26 in 5 minutes: every band's mask and every block, fields as the grid
     int seen18[SBAS_MAX_BANDS] = {0}, seen26[SBAS_MAX_BANDS][14] = {{0}};
     for (int sec = 600; sec < 900; sec++) {
-        int type = sbas_message(sec, iode, pos, &ion, data);
+        int type = sbas_message(sec, iode, pos, &ion, NULL, 0, data);
         expect("no null message with a grid", type == 63, 0);
         if (type == 18) {
             int k;
@@ -189,6 +189,25 @@ int main(void) {
         for (int b = 0; b < (ion.nigp[k] + 14) / 15; b++)
             expect("MT26 of each block within 300 s", seen26[k][b] > 0, 1);
     }
+
+    // MT17 once a minute: the GEOs being sent, provider ID and "no ranging" as EGNOS (0x11)
+    const sbas_geo_t geos[2] = {{136, "EGNOS", 5.0}, {131, "WAAS", -117.0}};
+    int n17 = 0;
+    for (int sec = 600; sec < 660; sec++) {
+        if (sbas_message(sec, iode, pos, &ion, geos, 2, data) != 17)
+            continue;
+        n17++;
+        expect("MT17 PRN 1", bitsToInt(data + 2, 8), 136);
+        expect("MT17 health 1 (EGNOS)", bitsToInt(data + 10, 8), 0x11);
+        expect("MT17 XG 1 [2600 m]", bitsToInt(data + 18, 15), (unsigned long) lround(SBAS_GEO_RADIUS * cos(5.0 / 57.29577951308232) / 2600.0));
+        expect("MT17 PRN 2", bitsToInt(data + 67 + 2, 8), 131);
+        expect("MT17 health 2 (WAAS)", bitsToInt(data + 67 + 10, 8), 0x01);
+        long yg = (long) bitsToInt(data + 67 + 33, 15);
+        expect("MT17 YG 2 negative", yg >= 1 << 14, 1);
+        expect("MT17 slot 3 empty", bitsToInt(data + 134, 67), 0);
+        expect("MT17 t0 [64 s]", bitsToInt(data + 201, 11), (unsigned long) ((sec % 86400) / 64));
+    }
+    expect("MT17 per minute", n17, 1);
 
     // A receiver's MOPS model from our grid (pierce point at 350 km, bilinear in the 5 deg cell,
     // MOPS obliquity) must give the Klobuchar slant delay the signal carries, within 1 m above 15 deg

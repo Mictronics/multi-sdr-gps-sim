@@ -250,14 +250,46 @@ static void mt26(const sbas_iono_t *ion, int k, int blk, unsigned char *data) {
     putBits(data, &off, ion->iodi, 2);
 }
 
+// Service provider ID of MT17 (ICAO Annex 10 table); 14 for systems that table does not list
+static int providerId(const char *system) {
+    static const char *const ids[] = {"WAAS", "EGNOS", "MSAS", "GAGAN", "SDCM", "BDSBAS", "KASS", "A-SBAS", "SPAN"};
+    for (int i = 0; i < (int) (sizeof (ids) / sizeof (ids[0])); i++)
+        if (strcmp(system, ids[i]) == 0)
+            return i;
+    return 14;
+}
+
+/* MT17: almanac of the GEOs being sent, at rest in their slots. Receivers that know a real
+ * almanac (EGNOS lists only 121 and 136) otherwise never search an extra GEO such as 150. */
+static void mt17(const sbas_geo_t *geos, int ngeo, int sec, unsigned char *data) {
+    int off = 0;
+    for (int k = 0; k < 3; k++) {
+        if (k < ngeo) {
+            double x = SBAS_GEO_RADIUS * cos(geos[k].lon / 57.29577951308232);
+            double y = SBAS_GEO_RADIUS * sin(geos[k].lon / 57.29577951308232);
+            putBits(data, &off, 0, 2);                                   // data ID
+            putBits(data, &off, geos[k].prn, 8);
+            putBits(data, &off, providerId(geos[k].system) << 4 | 1, 8); // provider, no ranging (as EGNOS: 0x11)
+            putBits(data, &off, lround(x / 2600.0), 15);
+            putBits(data, &off, lround(y / 2600.0), 15);
+            putBits(data, &off, 0, 9 + 3 + 3 + 4);                        // ZG, velocities
+        } else {
+            putBits(data, &off, 0, 67); // PRN 0: no GEO in this slot
+        }
+    }
+    putBits(data, &off, (sec % 86400) / 64, 11); // t0, 64 s
+}
+
 /* Data field of the message sent at second of week sec, returns its type. iode[sv] is the IODE
- * of GPS PRN sv + 1, -1 without ephemeris; pos is the GEO for MT9 (ECEF, m); ion the grid.
+ * of GPS PRN sv + 1, -1 without ephemeris; pos is the GEO for MT9 (ECEF, m); ion the grid;
+ * geos the GEOs being sent, for MT17.
  * Every 6 s MT2, MT3, MT4, then three slots from a 60 s list: MT1 twice, all 8 MT25, MT9, MT7,
- * MT10, and 17 slots that cycle through MT18 and the MT26 blocks of each band (all within 300 s).
+ * MT10, MT17, and 16 slots that cycle through MT18 and the MT26 blocks of each band (within 300 s).
  * The ionosphere messages also give the stream enough symbol transitions: with only zero
  * corrections and null messages a u-blox M8T never synchronised (15 % vs 24 % transitions). */
-int sbas_message(int sec, const int *iode, const double *pos, const sbas_iono_t *ion, unsigned char *data) {
-    static const int rest[30] = {1, 25, 25, 25, 25, 9, 7, 10, 25, 25, 25, 25, 63, 63, 63,
+int sbas_message(int sec, const int *iode, const double *pos, const sbas_iono_t *ion,
+        const sbas_geo_t *geos, int ngeo, unsigned char *data) {
+    static const int rest[30] = {1, 25, 25, 25, 25, 9, 7, 10, 25, 25, 25, 25, 17, 63, 63,
                                  1, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63};
     int s = sec % 60, type, n25 = 0, n63 = 0, iono_k = 0, iono_blk = -1;
 
@@ -275,7 +307,7 @@ int sbas_message(int sec, const int *iode, const double *pos, const sbas_iono_t 
         int total = 0;
         for (int k = 0; k < ion->nband; k++)
             total += 1 + (ion->nigp[k] + 14) / 15;
-        int item = ((sec / 60) * 17 + n63) % total; // position in the MT18/MT26 cycle
+        int item = ((sec / 60) * 16 + n63) % total; // position in the MT18/MT26 cycle, 16 slots per minute
         for (iono_k = 0; item >= 1 + (ion->nigp[iono_k] + 14) / 15; iono_k++)
             item -= 1 + (ion->nigp[iono_k] + 14) / 15;
         iono_blk = item - 1; // -1: the band's MT18
@@ -287,6 +319,7 @@ int sbas_message(int sec, const int *iode, const double *pos, const sbas_iono_t 
         case 2: case 3: case 4: mt2_4(type, iode, data); break;
         case 7: mt7(data); break;
         case 9: sbas_mt9(pos, sec, data); break;
+        case 17: mt17(geos, ngeo, sec, data); break;
         case 10: mt10(data); break;
         case 25: mt25(n25, iode, data); break;
         case 18: mt18(ion, iono_k, data); break;

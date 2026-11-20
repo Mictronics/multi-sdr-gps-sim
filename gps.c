@@ -1800,6 +1800,8 @@ typedef struct {
     sbas_chan_t sbas[SBAS_MAX_CHAN];
     double sbas_gain[SBAS_MAX_CHAN];
     sbas_iono_t sbas_iono; // Ionospheric grid around the user, sent by all GEOs
+    sbas_geo_t sbas_geos[SBAS_MAX_CHAN]; // GEOs being sent, for their almanac (MT17)
+    int sbas_ngeo;
     double ant_pat[37]; // Receiver antenna gain per 5 degree of boresight angle
     double (*xyz)[3]; // User position every 0.1 s
     int numd; // Number of positions
@@ -1838,15 +1840,15 @@ static int sbasSymbol(const sbas_chan_t *sb) {
 
 /* Encode the messages of nsec seconds, starting at transmit time g, into sym[] from second off on.
  * eph gives the IODEs the long term corrections refer to. */
-static void sbasFill(sbas_chan_t *sb, const ephem_t *eph, const sbas_iono_t *ion, gpstime_t g, int off, int nsec) {
+static void sbasFill(sbas_chan_t *sb, const gps_ctx_t *c, gpstime_t g, int off, int nsec) {
     unsigned char data[SBAS_DATA_BITS], msg[SBAS_MSG_BITS];
     int iode[MAX_SAT];
 
     for (int sv = 0; sv < MAX_SAT; sv++)
-        iode[sv] = eph[sv].vflg ? eph[sv].iode : -1;
+        iode[sv] = c->eph[sv].vflg ? c->eph[sv].iode : -1;
     for (int k = 0; k < nsec; k++) {
         int sec = (int) (incGpsTime(g, k).sec + 0.5);
-        int type = sbas_message(sec, iode, sb->pos, ion, data);
+        int type = sbas_message(sec, iode, sb->pos, &c->sbas_iono, c->sbas_geos, c->sbas_ngeo, data);
 
         sbas_frame(type, data, sec, msg);
         sbas_encode(&sb->enc, msg, SBAS_MSG_BITS, sb->sym + (off + k) * 500);
@@ -1854,7 +1856,7 @@ static void sbasFill(sbas_chan_t *sb, const ephem_t *eph, const sbas_iono_t *ion
 }
 
 /* Start an SBAS channel at receiver time grx (on a 30 s boundary, or the scenario start) */
-static void sbasStart(sbas_chan_t *sb, const sbas_geo_t *geo, const ephem_t *eph, const sbas_iono_t *ion, ionoutc_t *ionoutc, gpstime_t grx, double *xyz) {
+static void sbasStart(sbas_chan_t *sb, const sbas_geo_t *geo, gps_ctx_t *c, double *xyz) {
     static const double zero[3] = {0.0, 0.0, 0.0};
 
     sb->prn = geo->prn;
@@ -1863,12 +1865,12 @@ static void sbasStart(sbas_chan_t *sb, const sbas_geo_t *geo, const ephem_t *eph
     sb->pos[2] = 0.0;
     codegen(sb->ca, sb->prn);
     // Buffer covers [base - 30 s, base + 30 s); +0.05 s because grx sums 0.1 s steps
-    sb->g0.week = grx.week;
-    sb->g0.sec = floor((grx.sec + 0.05) / 30.0) * 30.0;
+    sb->g0.week = c->grx.week;
+    sb->g0.sec = floor((c->grx.sec + 0.05) / 30.0) * 30.0;
     sb->g0 = incGpsTime(sb->g0, -30.0);
     sb->enc = 0;
-    sbasFill(sb, eph, ion, sb->g0, 0, 60);
-    rangeFromPos(&sb->rho0, sb->pos, zero, 0.0, ionoutc, grx, xyz);
+    sbasFill(sb, c, sb->g0, 0, 60);
+    rangeFromPos(&sb->rho0, sb->pos, zero, 0.0, &c->ionoutc, c->grx, xyz);
     sb->azel[0] = sb->rho0.azel[0];
     sb->azel[1] = sb->rho0.azel[1];
     sb->carr_phase = 0.0;
@@ -1880,6 +1882,9 @@ static void allocateSbas(gps_ctx_t *c, double *xyz) {
     const simulator_t *sim = c->sim;
     static const double zero[3] = {0.0, 0.0, 0.0};
     sbas_geo_t forced = {sim->sbas_prn, "SBAS", sim->sbas_lon};
+    for (int k = 0; k < sbas_geo_count; k++) // the system of a known PRN, for MT17
+        if (sbas_geo[k].prn == sim->sbas_prn)
+            forced.system = sbas_geo[k].system;
     const sbas_geo_t *list = sim->sbas_prn ? &forced : sbas_geo;
     int n = sim->sbas_prn ? 1 : sbas_geo_count;
     const sbas_geo_t *want[SBAS_MAX_CHAN] = {NULL};
@@ -1912,6 +1917,9 @@ static void allocateSbas(gps_ctx_t *c, double *xyz) {
         want[nwant++] = &list[top];
     }
 
+    c->sbas_ngeo = nwant; // the almanac lists the GEOs chosen now
+    for (int j = 0; j < nwant; j++)
+        c->sbas_geos[j] = *want[j];
     for (int i = 0; i < SBAS_MAX_CHAN; i++) { // Drop GEOs no longer chosen
         bool keep = false;
         for (int j = 0; j < nwant; j++)
@@ -1925,7 +1933,7 @@ static void allocateSbas(gps_ctx_t *c, double *xyz) {
             running |= c->sbas[i].prn == want[j]->prn;
         for (int i = 0; !running && i < SBAS_MAX_CHAN; i++) {
             if (c->sbas[i].prn == 0) {
-                sbasStart(&c->sbas[i], want[j], c->eph, &c->sbas_iono, &c->ionoutc, c->grx, xyz);
+                sbasStart(&c->sbas[i], want[j], c, xyz);
                 running = true;
             }
         }
@@ -2466,7 +2474,7 @@ static void updateNavigation(gps_ctx_t *c, int iumd, const double *llh) {
         if (sb->prn > 0) {
             memmove(sb->sym, sb->sym + SBAS_SYMS / 2, SBAS_SYMS / 2);
             sb->g0 = incGpsTime(sb->g0, 30.0);
-            sbasFill(sb, c->eph, &c->sbas_iono, incGpsTime(sb->g0, 30.0), 30, 30);
+            sbasFill(sb, c, incGpsTime(sb->g0, 30.0), 30, 30);
         }
     }
     allocateSbas(c, c->xyz[iumd]);
