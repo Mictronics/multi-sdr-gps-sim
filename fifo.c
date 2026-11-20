@@ -107,6 +107,15 @@ bool fifo_is_empty(void) {
     return empty;
 }
 
+unsigned fifo_count(void) {
+    pthread_mutex_lock(&fifo_mutex);
+    unsigned n = 0;
+    for (struct iq_buf *b = fifo_head; b != NULL; b = b->next)
+        n++;
+    pthread_mutex_unlock(&fifo_mutex);
+    return n;
+}
+
 void fifo_halt() {
     pthread_mutex_lock(&fifo_mutex);
 

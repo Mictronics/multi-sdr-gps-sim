@@ -79,5 +79,6 @@ void gui_show_heading(float hdg);
 void gui_show_vertical_speed(float vs);
 void gui_show_location(void *l);
 void gui_show_target(void *t);
+void gui_show_status(bool tx_on, int gain, bool has_gain, unsigned fifo_fill, unsigned fifo_size);
 
 #endif /* GUI_H */

@@ -49,6 +49,9 @@ void fifo_halt();
 // True when no filled buffer is waiting for the consumer.
 bool fifo_is_empty(void);
 
+// Number of filled buffers waiting for the SDR; 0 while streaming means the producer falls behind.
+unsigned fifo_count(void);
+
 // Get an unused buffer from the freelist and return it.
 // Block waiting for a free buffer. Returns NULL if the FIFO is halted.
 struct iq_buf *fifo_acquire(void);

@@ -43,6 +43,7 @@ simulator_t simulator = {
 };
 static bool gps_thread_started = false;
 static bool tx_off = false; // SDR closed after the simulation ended
+static bool tx_started = false;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state);
 const char *argp_program_version = "v1.0";
@@ -274,6 +275,7 @@ int main(int argc, char** argv) {
     int ch = 0;
     bool is_info_shown = false;
     bool is_help_shown = false;
+    int status_tick = 10; // Show the status line right away
 
     // signal handlers, reset after the first signal so a second one terminates
     struct sigaction sa = {.sa_handler = signal_handler, .sa_flags = SA_RESETHAND};
@@ -338,6 +340,8 @@ int main(int argc, char** argv) {
             if (sdr_run() != 0) {
                 gui_status_wprintw(RED, "Starting SDR streaming failed.\n");
                 simulator.gps_thread_exit = true;
+            } else {
+                tx_started = true;
             }
         }
     }
@@ -352,6 +356,11 @@ int main(int argc, char** argv) {
             } else {
                 gui_status_wprintw(GREEN, "Transmitter off, press 'x' to exit.\n");
             }
+        }
+        if (++status_tick >= 10) { // About once per second
+            status_tick = 0;
+            bool has_gain = simulator.sdr_type != SDR_NONE && simulator.sdr_type != SDR_IQFILE;
+            gui_show_status(tx_started && !tx_off, simulator.tx_gain, has_gain, fifo_count(), NUM_FIFO_BUFFERS);
         }
         ch = gui_getch();
         if (ch != -1) {

@@ -542,6 +542,25 @@ void gui_show_location(void *l) {
     pthread_mutex_unlock(&gui_lock);
 }
 
+/* One line on every main panel, left of the title. */
+void gui_show_status(bool tx_on, int gain, bool has_gain, unsigned fifo_fill, unsigned fifo_size) {
+    if (headless)
+        return;
+    char line[48];
+    if (has_gain)
+        snprintf(line, sizeof line, "TX %-3s  Gain %3d dB  FIFO %u/%u", tx_on ? "on" : "off", gain, fifo_fill, fifo_size);
+    else
+        snprintf(line, sizeof line, "TX %-3s  FIFO %u/%u", tx_on ? "on" : "off", fifo_fill, fifo_size);
+    pthread_mutex_lock(&gui_lock);
+    for (window_panel_t p = TRACK; p <= KF_FIX; p++) {
+        wattron(window[p], COLOR_PAIR(5));
+        mvwprintw(window[p], 1, 2, "%-40s", line);
+        wattroff(window[p], COLOR_PAIR(5));
+    }
+    gui_update();
+    pthread_mutex_unlock(&gui_lock);
+}
+
 void gui_show_target(void *t) {
     if (headless)
         return;
