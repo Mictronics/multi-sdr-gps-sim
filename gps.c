@@ -491,7 +491,7 @@ static unsigned long healthSlot(unsigned long health, int slot) {
  * eph Ephemeris of given SV
  * sbf Array of five sub-frames, 10 long words each
  */
-void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *alm, unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF]) {
+void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *alm, const char *msg, unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF]) {
     unsigned long wn;
     unsigned long toe;
     unsigned long toc;
@@ -675,6 +675,20 @@ void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *al
         sbf[3 + 17 * 2][7] = ((A0 & 0xFFUL) << 22) | ((tot & 0xFFUL) << 14) | ((wnt & 0xFFUL) << 6);
         sbf[3 + 17 * 2][8] = ((dtls & 0xFFUL) << 22) | ((wnlsf & 0xFFUL) << 14) | ((dn & 0xFFUL) << 6);
         sbf[3 + 17 * 2][9] = (dtlsf & 0xFFUL) << 22;
+    }
+
+    // Subframe 4, page 17: special message, 22 ASCII characters (IS-GPS-200 20.3.3.5.1.8), space padded.
+    // Characters 1-2 in word 3, three per word in words 4-9, 21-22 in word 10 before 6 reserved bits.
+    if (msg != NULL) {
+        unsigned long c[SPECIAL_MSG_LEN];
+        size_t n = strlen(msg);
+        for (i = 0; i < SPECIAL_MSG_LEN; i++)
+            c[i] = (unsigned long) (unsigned char) (i < (int) n ? msg[i] : ' ');
+        unsigned long *page = sbf[3 + 16 * 2];
+        page[2] = (dataId << 28) | (sbf4_svId[16] << 22) | (c[0] << 14) | (c[1] << 6);
+        for (i = 0; i < 6; i++)
+            page[3 + i] = (c[2 + 3 * i] << 22) | (c[3 + 3 * i] << 14) | (c[4 + 3 * i] << 6);
+        page[9] = (c[20] << 22) | (c[21] << 14);
     }
 
     // Subframe 4, page 25: SV health data for PRN 25 through 32
@@ -1560,7 +1574,7 @@ static int checkSatVisibility(ephem_t eph, gpstime_t g, double *xyz, double elvM
     return (0); // Invisible
 }
 
-static int allocateChannel(channel_t *chan, almanac_gps_t *alm, ephem_t *eph, ionoutc_t ionoutc, gpstime_t grx, double *xyz) {
+static int allocateChannel(channel_t *chan, almanac_gps_t *alm, const char *msg, ephem_t *eph, ionoutc_t ionoutc, gpstime_t grx, double *xyz) {
     int nsat = 0;
     int i, sv;
     double azel[2];
@@ -1584,7 +1598,7 @@ static int allocateChannel(channel_t *chan, almanac_gps_t *alm, ephem_t *eph, io
                         codegen(chan[i].ca, chan[i].prn);
 
                         // Generate subframe
-                        eph2sbf(eph[sv], ionoutc, alm, chan[i].sbf);
+                        eph2sbf(eph[sv], ionoutc, alm, msg, chan[i].sbf);
 
                         // Generate navigation message
                         generateNavMsg(grx, &chan[i], 1);
@@ -2235,7 +2249,7 @@ static void initChannels(gps_ctx_t *c) {
         allocatedSat[sv] = -1;
 
     c->grx = incGpsTime(c->g0, 0.0);
-    allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[0]);
+    allocateChannel(c->chan, c->alm, c->sim->nav_message, c->eph, c->ionoutc, c->grx, c->xyz[0]);
     if (c->sim->sbas_enable) {
         double llh[3];
         xyz2llh(c->xyz[0], llh);
@@ -2445,7 +2459,7 @@ static void updateNavigation(gps_ctx_t *c, int iumd, const double *llh) {
     for (int i = 0; i < MAX_CHAN; i++) {
         int sv = c->chan[i].prn - 1;
         if (sv >= 0 && next[sv].vflg && !sameEphemeris(&next[sv], &c->eph[sv]))
-            eph2sbf(next[sv], c->ionoutc, c->alm, c->chan[i].sbf);
+            eph2sbf(next[sv], c->ionoutc, c->alm, c->sim->nav_message, c->chan[i].sbf);
     }
     memcpy(c->eph, next, sizeof (next));
 
@@ -2455,7 +2469,7 @@ static void updateNavigation(gps_ctx_t *c, int iumd, const double *llh) {
         }
     }
 
-    allocateChannel(c->chan, c->alm, c->eph, c->ionoutc, c->grx, c->xyz[iumd]);
+    allocateChannel(c->chan, c->alm, c->sim->nav_message, c->eph, c->ionoutc, c->grx, c->xyz[iumd]);
 
     // Next 30 s of SBAS messages; channels started below fill their own buffer
     if (sim->sbas_enable)

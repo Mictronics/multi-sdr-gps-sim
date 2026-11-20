@@ -9,7 +9,7 @@
 #include "gps-sim.h"
 #include "almanac.h"
 
-void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *alm, unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF]);
+void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *alm, const char *msg, unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF]);
 void generateNavMsg(gpstime_t g, channel_t *chan, int init);
 
 static unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF];
@@ -71,7 +71,7 @@ int main(void) {
         alm->sv[sv].sqrta = 5153.7; alm->sv[sv].e = 0.01;
     }
     alm->valid = 1;
-    eph2sbf(eph, io, alm, sbf);
+    eph2sbf(eph, io, alm, NULL, sbf);
 
     expect("SF1 SV health", field(0, 77, 6), 0x2B);
     expect("SF1 IODC MSBs", field(0, 83, 2), (0x2AB >> 8) & 3);
@@ -115,7 +115,7 @@ int main(void) {
     memset(&blank, 0, sizeof (blank));
     gpstime_t start = {2445, 330237.0};
     ionoDefaults(&blank, start);
-    eph2sbf(eph, blank, alm, sbf);
+    eph2sbf(eph, blank, alm, NULL, sbf);
     expect("defaults: page 18 SV id", field(3 + 17 * 2, 63, 6), 56);
     expect("defaults: alpha0", field(3 + 17 * 2, 69, 8), 0);
     expect("defaults: beta0", field(3 + 17 * 2, 105, 8), 0);
@@ -134,7 +134,7 @@ int main(void) {
     *p27 = (almanac_prn_t) {.valid = 1, .svid = 27, .health = 0, .e = 0.00321, .delta_i = 0.0087, .omegadot = -2.9e-9, .sqrta = 5153.9,
         .omega0 = 0.4567, .aop = -0.1234, .m0 = 0.8123, .af0 = 2.6e-5, .af1 = 1.1e-12, .toa = {2445, 503808.0}};
     al->valid = 1;
-    eph2sbf(eph, io, al, sbf);
+    eph2sbf(eph, io, al, NULL, sbf);
     check_almanac_page(4 + 4 * 2, 5, p5);   // subframe 5, page 5
     check_almanac_page(3 + 3 * 2, 27, p27); // subframe 4, page 4
     expect("SF5 page 25 SV id", field(4 + 24 * 2, 63, 6), 51);
@@ -145,7 +145,7 @@ int main(void) {
     // encode to the nearest step (G01 of the sample file; truncation was one step off for these)
     static ephem_t g01;
     g01.af0 = 1.258905977010E-04; g01.af1 = -8.071765478230E-12; g01.m0 = 1.055555253870E+00; g01.sqrta = 5.153735734940E+03;
-    eph2sbf(g01, io, al, sbf);
+    eph2sbf(g01, io, al, NULL, sbf);
     expect("eph af0 steps", (unsigned long) sfield(0, 271, 22), 270348);
     expect("eph af1 steps", (unsigned long) sfield(0, 249, 16), (unsigned long) -71L);
     expect("eph M0 steps", (field(1, 107, 8) << 24) | field(1, 121, 24), 721540918);
@@ -153,7 +153,7 @@ int main(void) {
 
     // TOW in the HOW of the last frame of a week: subframe 4 announces 100799, subframe 5 the new week's 0
     static channel_t ch;
-    eph2sbf(eph, io, al, ch.sbf);
+    eph2sbf(eph, io, al, NULL, ch.sbf);
     generateNavMsg((gpstime_t) {2445, 604770.0}, &ch, 1);
     for (int s = 4; s <= 5; s++) {
         unsigned long how = ch.dwrd[s * N_DWRD_SBF + 1];
@@ -165,7 +165,7 @@ int main(void) {
     // Almanac page by time: the frame at 120 s is frame 4 of the week, so subframe 5 carries page 5
     // (PRN 5); the previous frame's subframe 5 (page 4, PRN 4 has no almanac here) is a dummy
     static channel_t pc;
-    eph2sbf(eph, io, al, pc.sbf);
+    eph2sbf(eph, io, al, NULL, pc.sbf);
     generateNavMsg((gpstime_t) {2445, 120.0}, &pc, 1);
     for (int s = 0; s <= 5; s += 5) {
         unsigned long w3 = pc.dwrd[s * N_DWRD_SBF + 2];
@@ -173,6 +173,19 @@ int main(void) {
             w3 ^= 0x3FFFFFC0UL;
         expect(s ? "frame 4 SF5 SV id" : "frame 3 SF5 SV id", (w3 >> 22) & 0x3FUL, s ? 5 : 0);
     }
+
+    // Special message, SF4 page 17: 8 bit characters from bit 69, the last two at 271 and 279
+    eph2sbf(eph, io, alm, "HELLO 0123456789+-.':/", sbf);
+    expect("SF4 p17 SV id", field(3 + 16 * 2, 63, 6), 55);
+    const char *want = "HELLO 0123456789+-.':/";
+    for (int k = 0; k < SPECIAL_MSG_LEN; k++) {
+        int b = k < 2 ? 69 + 8 * k : k < 20 ? 91 + 30 * ((k - 2) / 3) + 8 * ((k - 2) % 3) : 271 + 8 * (k - 20);
+        char w[40]; snprintf(w, sizeof w, "SF4 p17 char %d", k + 1);
+        expect(w, field(3 + 16 * 2, b, 8), (unsigned char) want[k]);
+    }
+    eph2sbf(eph, io, alm, "HI", sbf);
+    expect("SF4 p17 padding", field(3 + 16 * 2, 91, 8), ' ');
+    expect("SF4 p17 reserved", field(3 + 16 * 2, 287, 6), 0);
 
     printf(failures ? "%d FAILURES\n" : "all checks passed\n", failures);
     return failures != 0;

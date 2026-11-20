@@ -105,6 +105,7 @@
  * with valid parity. (IS-GPS-200L, p.111, 20.3.3.5.1.2)
  */
 #define EMPTY_WORD 0xaaaaaaaaUL
+#define SPECIAL_MSG_LEN 22 // Characters in subframe 4 page 17
 
 /* Structure representing GPS time */
 typedef struct

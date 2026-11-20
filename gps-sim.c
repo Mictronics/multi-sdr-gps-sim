@@ -12,6 +12,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 #include <signal.h>
 #include <errno.h>
 #include <limits.h>
@@ -176,6 +178,17 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             if (sscanf(arg, "%d,%lf", &simulator.sbas_prn, &simulator.sbas_lon) != 2 ||
                     simulator.sbas_prn < SBAS_PRN_MIN || simulator.sbas_prn > SBAS_PRN_MAX || fabs(simulator.sbas_lon) > 180.0) {
                 argp_error(state, "Invalid SBAS GEO '%s', expected PRN 120-158,longitude.", arg);
+            }
+            break;
+        case 706: // --message
+            if (strlen(arg) > SPECIAL_MSG_LEN)
+                argp_error(state, "Message '%s' is longer than %d characters.", arg, SPECIAL_MSG_LEN);
+            set_string(&simulator.nav_message, arg);
+            for (char *p = simulator.nav_message; *p; p++) {
+                *p = (char) toupper((unsigned char) *p);
+                // IS-GPS-200 Table 20-VIII; its degree sign is left out (not ASCII)
+                if (!(*p >= 'A' && *p <= 'Z') && !(*p >= '0' && *p <= '9') && strchr(" +-.':/\"", *p) == NULL)
+                    argp_error(state, "Message '%s' has a character outside A-Z 0-9 space + - . ' : / \".", arg);
             }
             break;
         case ARGP_KEY_END:

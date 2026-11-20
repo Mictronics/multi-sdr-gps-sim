@@ -193,6 +193,7 @@ Options:
 --disable-almanac       Disable transmission of almanac information
 --disable-sbas          Disable the SBAS GEO signals
 --no-tui                No terminal UI: print status to stderr and exit when the simulation ends
+--message               <text> Send up to 22 characters (A-Z 0-9 space + - . ' : / ") as the GPS special message (subframe 4 page 17)
 --sbas                  <prn,longitude> Use only this SBAS GEO, e.g. 136,5.0 (default: the GEOs of the highest system in view)
 --help              -?  Give this help list
 --usage                 Give a short usage message

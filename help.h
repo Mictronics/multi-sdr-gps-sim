@@ -40,6 +40,7 @@ static struct argp_option options[] = {
     {"disable-almanac", 702, 0, 0, "Disable transmission of almanac information", 1},
     {"disable-sbas", 703, 0, 0, "Disable the SBAS GEO signals", 1},
     {"no-tui", 705, 0, 0, "No terminal UI: print status to stderr and exit when the simulation ends", 1},
+    {"message", 706, "text", 0, "Send up to 22 characters (A-Z 0-9 space + - . ' : / \") as the GPS special message (subframe 4 page 17)", 1},
     {"sbas", 704, "prn,longitude", 0, "Use only this SBAS GEO, e.g. 136,5.0 (default: the GEOs of the highest system in view)", 1},
     {0, 0, 0, 0, "SDR device types (use with --radio or -r option):", 3},
     {0, 0, 0, OPTION_DOC, "   none", 3},
