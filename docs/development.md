@@ -13,6 +13,7 @@
 | `model.c` | ionosphere, troposphere, pseudorange |
 | `navmsg.c` | navigation message subframes and parity |
 | `download.c` | HTTPS downloads for `-f` |
+| `motion.c` | GPX reader for `-m`, resampling to 0.1 s, EGM96 geoid height (`geoid_egm96.h`, generated) |
 | `almanac.c` | SEM almanac reader and download |
 | `sbas.c` | SBAS messages, CRC-24Q, convolutional encoder |
 | `fifo.c` | buffer between the GPS thread and the SDR thread |
@@ -36,6 +37,19 @@ The tests need no SDR and no terminal (the TUI is stubbed in `tests/stubs.c`) an
 | `test_sbas` | CRC-24Q, convolutional code, message fields and schedule, the ionospheric grid against RTKLIB's IGP bands |
 | `test_almanac` | almanac download order, retries, rejected files, the cached `almanac.sem` (no network) |
 | `test_signal` | no code phase jump between the 0.1 s blocks; noise sigma and C/N0 with `--cn0` |
+| `test_motion` | GPX resampling onto 0.1 s steps, time zones, `<ele>` plus geoid, rejected files, the geoid table against EGM96 |
+
+## Geoid table
+
+`geoid_egm96.h` is generated from GeographicLib's EGM96 15' grid (`egm96-15.tar.bz2` from the GeographicLib geoids download on SourceForge), every 4th point, in decimetres:
+
+```
+$ tar xjf egm96-15.tar.bz2
+$ python3 docs/mkgeoid.py geoids/egm96-15.pgm geoid_egm96.h
+max 13.65 m rms 0.446 m
+```
+
+The printed line is the bilinear error of the 1° table against every point of the 15' grid.
 
 ## Regression check
 
