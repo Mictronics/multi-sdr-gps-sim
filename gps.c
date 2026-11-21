@@ -284,6 +284,9 @@ static int readUserMotion(double xyz[USER_MOTION_SIZE][3], const char *filename)
 // --cn0 noise floor: sigma per I/Q component in iq_buff units; all outputs clip at +-2047, 5 sigma
 #define NOISE_SIGMA 400.0
 #define NOISE_TABLE 4096 // Gaussian values, indexed by 12 random bits
+// One chip value per sample at 3 MS/s correlates 0.34 dB worse with the band-limited ideal C/A code
+// (offline check, any Doppler); --cn0 adds it back so the usable C/N0 is the requested one
+#define CODE_SAMPLING_LOSS_DB 0.34
 
 // Satellites with a record near the start time that make -s now keep the ephemeris unshifted
 #define COVER_MIN_SATS 4
@@ -773,7 +776,7 @@ static void initLevel(gps_ctx_t *c) {
     c->noise = c->sim->cn0 > 0.0;
     if (!c->noise)
         return;
-    c->level = NOISE_SIGMA * sqrt(2.0 * pow(10.0, c->sim->cn0 / 10.0) / TX_SAMPLERATE) / 250.0;
+    c->level = NOISE_SIGMA * sqrt(2.0 * pow(10.0, (c->sim->cn0 + CODE_SAMPLING_LOSS_DB) / 10.0) / TX_SAMPLERATE) / 250.0;
     c->rng = 0x9E3779B9u;
     for (int k = 0; k < NOISE_TABLE; k += 2) { // Box-Muller, two values per pair of uniforms
         double u1 = (xorshift32(&c->rng) + 1.0) / 4294967297.0;

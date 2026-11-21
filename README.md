@@ -223,7 +223,7 @@ Measured with an ADALM-Pluto (OCXO mod) over the 60 dB cable into a u-blox NEO-M
 | 45 | -1.9 dB |
 | 50 | -2.8 dB |
 
-The offset is about 1.5 dB of loss (receiver and the 3 MS/s signal) plus, at high levels, the other satellites' signals adding to the noise. Expect similar values from other receivers, not exact ones.
+The offset is about 1.5 dB of loss plus, at high levels, the other satellites' signals adding to the noise. 0.34 dB of the loss came from the simulator: with one code chip value per sample at 3 MS/s the signal correlates that much worse with the ideal code, which `--cn0` now compensates (these values were measured before, expect about 0.3 dB less offset). The remaining ~1.1 dB is the receiver's own loss; expect similar values from other receivers, not exact ones.
 
 ### SBAS
 

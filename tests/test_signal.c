@@ -3,7 +3,7 @@
  *   a block end must equal the one updateChannels sets from the range for the next block. Double
  *   rounding of the time of week leaves up to 1e-4 chip; a jump of 1e-3 chip (0.3 m) fails.
  * - with --cn0 the noise has the planned sigma and a satellite's power over the noise density gives
- *   the requested C/N0 (scaled by its path loss and antenna gain) within 0.5 dB.
+ *   the requested C/N0 (scaled by its path loss and antenna gain, plus CODE_SAMPLING_LOSS_DB) within 0.5 dB.
  * Includes gps.c for its static channel functions, so it links the modules without gps.o.
  * Run with "make test".
  */
@@ -127,7 +127,8 @@ static void checkCn0(double cn0) {
         c.sbas[i].prn = 0;
 
     updateChannels(&c, 1);
-    double want = cn0 + 20.0 * log10(c.gain[keep] / c.level); // Path loss and antenna gain
+    // Path loss and antenna gain; the power includes what the 3 MS/s sampling loses in correlation
+    double want = cn0 + CODE_SAMPLING_LOSS_DB + 20.0 * log10(c.gain[keep] / c.level);
 
     short tab[NOISE_TABLE]; // Zeroed instead of clearing c.noise, which also selects the rounding
     memcpy(tab, c.noise_tab, sizeof (tab));
