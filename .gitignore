@@ -46,3 +46,4 @@ tests/test_fifo
 tests/test_model
 tests/test_sbas
 tests/test_almanac
+tests/test_signal
