@@ -30,6 +30,7 @@
 #include "rinex.h"
 #include "model.h"
 #include "navmsg.h"
+#include "motion.h"
 #include "download.h"
 
 const int sinTable512[] = {
@@ -246,37 +247,6 @@ static int allocateChannel(channel_t *chan, almanac_gps_t *alm, const char *msg,
     }
 
     return (nsat);
-}
-
-/* Read the list of user motions from the input file
- * xyz Output array of ECEF vectors for user motion
- * filename File name of the text input file
- * Returns number of user data motion records read, -1 on error
- */
-static int readUserMotion(double xyz[USER_MOTION_SIZE][3], const char *filename) {
-    FILE *fp;
-    int numd;
-    char str[MAX_CHAR];
-    double t, x, y, z;
-
-    if (NULL == (fp = fopen(filename, "rt")))
-        return (-1);
-
-    for (numd = 0; numd < USER_MOTION_SIZE; numd++) {
-        if (fgets(str, MAX_CHAR, fp) == NULL)
-            break;
-
-        if (sscanf(str, "%lf,%lf,%lf,%lf", &t, &x, &y, &z) != 4) // Read CSV line
-            break;
-
-        xyz[numd][0] = x;
-        xyz[numd][1] = y;
-        xyz[numd][2] = z;
-    }
-
-    fclose(fp);
-
-    return (numd);
 }
 
 #define SAMPLE_PERIOD (1.0 / (double) TX_SAMPLERATE)
@@ -570,9 +540,10 @@ static bool loadMotionFile(gps_ctx_t *c) {
     if (sim->motion_file_name == NULL)
         return true;
 
-    c->numd = readUserMotion(c->xyz, sim->motion_file_name);
+    const char *err;
+    c->numd = readGpx(c->xyz, USER_MOTION_SIZE, sim->motion_file_name, sim->location.height, &err);
     if (c->numd <= 0) {
-        gui_status_wprintw(RED, "Failed to read user motion file.\n");
+        gui_status_wprintw(RED, "Failed to read user motion file: %s.\n", err);
         return false;
     }
     gui_status_wprintw(GREEN, "%u user motion points applied.\n", c->numd);

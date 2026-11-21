@@ -47,3 +47,4 @@ tests/test_model
 tests/test_sbas
 tests/test_almanac
 tests/test_signal
+tests/test_motion
