@@ -15,6 +15,7 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include <inttypes.h>
+#include <time.h>
 #include <lime/LimeSuite.h>
 #include "fifo.h"
 #include "gui.h"
@@ -41,13 +42,31 @@ static int clamp_gain(int gain) {
     return gain < LIME_TX_GAIN_MIN ? LIME_TX_GAIN_MIN : (gain > LIME_TX_GAIN_MAX ? LIME_TX_GAIN_MAX : gain);
 }
 
+/* Report underruns, lost packets and an empty host FIFO since the last call, with the local time
+ * so they can be matched against a receiver log. */
+static void report_stream_status(void) {
+    lms_stream_status_t st;
+    if (LMS_GetStreamStatus(&tx_stream, &st) != 0)
+        return;
+    if (st.underrun == 0 && st.droppedPackets == 0 && st.fifoFilledCount > 0)
+        return;
+    char hms[16];
+    time_t now = time(NULL);
+    strftime(hms, sizeof (hms), "%H:%M:%S", localtime(&now));
+    gui_status_wprintw(RED, "%s LimeSDR stream: underrun %u, dropped %u, FIFO %u/%u\n",
+            hms, st.underrun, st.droppedPackets, st.fifoFilledCount, st.fifoSize);
+}
+
 static void *lime_tx_thread_ep(void *arg) {
     (void) arg;
+    unsigned blocks = 0;
 
     thread_to_core(CORE_SDR);
     set_thread_name("limesdr-thread");
 
     while (!lime_tx_thread_exit) {
+        if (++blocks % 10 == 0) // FIFO blocks are 0.1 s
+            report_stream_status();
         struct iq_buf *iq = fifo_dequeue();
         if (iq == NULL || iq->data16 == NULL) {
             break;
