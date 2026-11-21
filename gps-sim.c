@@ -181,6 +181,14 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
                 argp_error(state, "Invalid SBAS GEO '%s', expected PRN 120-158,longitude.", arg);
             }
             break;
+        case 707: // --cn0
+        {
+            char *end;
+            simulator.cn0 = strtod(arg, &end);
+            if (end == arg || *end != '\0' || simulator.cn0 < 20.0 || simulator.cn0 > 55.0)
+                argp_error(state, "Invalid C/N0 '%s', expected 20-55 dB-Hz.", arg);
+            break;
+        }
         case 706: // --message
             if (strlen(arg) > SPECIAL_MSG_LEN)
                 argp_error(state, "Message '%s' is longer than %d characters.", arg, SPECIAL_MSG_LEN);

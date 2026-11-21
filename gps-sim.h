@@ -77,6 +77,7 @@ typedef struct
     bool headless;   // --no-tui: status to stderr, exit when the run ends
     int sbas_prn;    // --sbas: the only GEO used, 0 = chosen from the table
     double sbas_lon; // its orbital slot [deg]
+    double cn0;      // --cn0: C/N0 overhead [dB-Hz] with a noise floor, 0 = no noise
     int duration;
     int tx_gain;
     int ppb;

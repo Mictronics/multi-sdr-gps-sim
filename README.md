@@ -194,6 +194,7 @@ Options:
 --disable-sbas          Disable the SBAS GEO signals
 --no-tui                No terminal UI: print status to stderr and exit when the simulation ends
 --message               <text> Send up to 22 characters (A-Z 0-9 space + - . ' : / ") as the GPS special message (subframe 4 page 17)
+--cn0                   <dB-Hz> Add a noise floor and set the C/N0 of a satellite overhead, 20-55; lower ones are weaker (default: no noise). Raise the TX gain until the receiver's C/N0 stops rising
 --sbas                  <prn,longitude> Use only this SBAS GEO, e.g. 136,5.0 (default: the GEOs of the highest system in view)
 --help              -?  Give this help list
 --usage                 Give a short usage message
@@ -206,6 +207,23 @@ SDR device types (use with --radio or -r option):
     plutosdr
     limesdr
 ````
+
+### Signal level (--cn0)
+
+Without `--cn0` the signal carries no noise, so the C/N0 a receiver reports depends on the TX gain, the cable and the receiver. With `--cn0 45` the simulator adds its own noise floor and sets every satellite relative to it: 45 dB-Hz for a satellite overhead, less for lower ones (path loss and antenna pattern, about 34 dB-Hz at the horizon). SBAS GEOs follow the same model.
+
+The receiver then reports the requested values once the simulated noise is well above its own noise. To set it up, start at a low gain and raise it step by step (`t` in the program) until the receiver's C/N0 stops rising; from there on a higher gain changes nothing but the RF level, so stay at the lowest gain that reaches it. The output is reproducible: the same `-e`, `-s` and `--cn0` give the same `iqdata.bin`.
+
+Measured with an ADALM-Pluto (OCXO mod) over the 60 dB cable into a u-blox NEO-M8T, `--cn0 45`: each 5 dB of gain brought the reported C/N0 closer to the requested one (-12.0 dB at `-g -45`, -7.7 at -40, -4.4 at -35, -2.6 at -30, -1.9 at -25), so `-g -25` is the working point on that setup, about 20 dB above the gain without noise. The elevation shape matched within ±0.3 dB on every satellite. At `-g -25` the receiver reported less than requested by:
+
+| `--cn0` | Reported - requested |
+|---|---|
+| 30 | -0.9 dB (4 satellites tracked) |
+| 40 | -1.6 dB |
+| 45 | -1.9 dB |
+| 50 | -2.8 dB |
+
+The offset is about 1.5 dB of loss (receiver and the 3 MS/s signal) plus, at high levels, the other satellites' signals adding to the noise. Expect similar values from other receivers, not exact ones.
 
 ### SBAS
 

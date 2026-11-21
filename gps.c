@@ -10,6 +10,7 @@
  *
  */
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -280,6 +281,10 @@ static int readUserMotion(double xyz[USER_MOTION_SIZE][3], const char *filename)
 
 #define SAMPLE_PERIOD (1.0 / (double) TX_SAMPLERATE)
 
+// --cn0 noise floor: sigma per I/Q component in iq_buff units; all outputs clip at +-2047, 5 sigma
+#define NOISE_SIGMA 400.0
+#define NOISE_TABLE 4096 // Gaussian values, indexed by 12 random bits
+
 // Satellites with a record near the start time that make -s now keep the ephemeris unshifted
 #define COVER_MIN_SATS 4
 
@@ -320,6 +325,10 @@ typedef struct {
     gpstime_t g0; // Scenario start
     gpstime_t grx; // Receiver time
     short *iq_buff; // 0.1 s of 16 bit IQ samples
+    double level; // Signal scale: 1 without --cn0, else the --cn0 level at 20200 km and boresight
+    bool noise; // --cn0: add noise[] to every sample
+    short noise_tab[NOISE_TABLE];
+    uint32_t rng; // xorshift32 state; fixed seed so runs stay reproducible
 } gps_ctx_t;
 
 /* List the allocated channels in the LS_FIX window. */
@@ -749,6 +758,40 @@ static bool loadAlmanac(gps_ctx_t *c) {
 }
 
 /* Allocate the satellites visible at the start and set up the antenna pattern. */
+static uint32_t xorshift32(uint32_t *x) {
+    *x ^= *x << 13;
+    *x ^= *x >> 17;
+    *x ^= *x << 5;
+    return *x;
+}
+
+/* Signal scale and noise table for --cn0. A satellite at the nominal zenith distance gets the
+ * amplitude A = sigma * sqrt(2 * C/N0 / fs) (complex noise power 2 sigma^2 over fs); 250 is the
+ * sine table's peak. Lower satellites keep the path loss and antenna pattern shape. */
+static void initLevel(gps_ctx_t *c) {
+    c->level = 1.0;
+    c->noise = c->sim->cn0 > 0.0;
+    if (!c->noise)
+        return;
+    c->level = NOISE_SIGMA * sqrt(2.0 * pow(10.0, c->sim->cn0 / 10.0) / TX_SAMPLERATE) / 250.0;
+    c->rng = 0x9E3779B9u;
+    for (int k = 0; k < NOISE_TABLE; k += 2) { // Box-Muller, two values per pair of uniforms
+        double u1 = (xorshift32(&c->rng) + 1.0) / 4294967297.0;
+        double u2 = xorshift32(&c->rng) / 4294967296.0;
+        double r = NOISE_SIGMA * sqrt(-2.0 * log(u1));
+        c->noise_tab[k] = (short) lround(r * cos(2.0 * PI * u2));
+        c->noise_tab[k + 1] = (short) lround(r * sin(2.0 * PI * u2));
+    }
+    // Scale to exactly NOISE_SIGMA: 4096 random values miss it by about 1 %
+    double var = 0.0;
+    for (int k = 0; k < NOISE_TABLE; k++)
+        var += (double) c->noise_tab[k] * c->noise_tab[k];
+    double scale = NOISE_SIGMA / sqrt(var / NOISE_TABLE);
+    for (int k = 0; k < NOISE_TABLE; k++)
+        c->noise_tab[k] = (short) lround(c->noise_tab[k] * scale);
+    gui_status_wprintw(GREEN, "Noise floor on, C/N0 %.1f dB-Hz for a satellite overhead\n", c->sim->cn0);
+}
+
 static void initChannels(gps_ctx_t *c) {
     for (int i = 0; i < MAX_CHAN; i++)
         c->chan[i].prn = 0;
@@ -765,6 +808,8 @@ static void initChannels(gps_ctx_t *c) {
     }
     allocateSbas(c, c->xyz[0]);
     showChannels(c);
+
+    initLevel(c);
 
     for (int i = 0; i < 37; i++)
         c->ant_pat[i] = pow(10.0, -ant_pat_db[i] / 20.0);
@@ -804,7 +849,7 @@ static void updateChannels(gps_ctx_t *c, int iumd) {
 
             // Receiver antenna gain by boresight angle
             int ibs = (int) ((90.0 - rho.azel[1] * R2D) / 5.0);
-            c->gain[i] = path_loss * c->ant_pat[ibs];
+            c->gain[i] = path_loss * c->ant_pat[ibs] * c->level;
         }
     }
 
@@ -832,8 +877,14 @@ static void updateChannels(gps_ctx_t *c, int iumd) {
 
         // Path loss relative to the GEO altitude, so an overhead GEO is as strong as an overhead GPS satellite
         int ibs = (int) ((90.0 - rho.azel[1] * R2D) / 5.0);
-        c->sbas_gain[i] = 35786000.0 / rho.d * c->ant_pat[ibs];
+        c->sbas_gain[i] = 35786000.0 / rho.d * c->ant_pat[ibs] * c->level;
     }
+}
+
+/* With --cn0 round to nearest: a signal of a few units would lose power to truncation. Without it
+ * v is returned as is, so the output stays as before. */
+static inline double sampleRound(double v, bool on) {
+    return on ? (double) (int) (v + copysign(0.5, v)) : v;
 }
 
 /* Generate 0.1 s of IQ samples into c->iq_buff. */
@@ -850,8 +901,8 @@ static void generateSamples(gps_ctx_t *c) {
             if (chan[i].prn > 0) {
                 int iTable = (int) floor(chan[i].carr_phase * 512.0) & 511; // Masked: a NaN phase must not index outside
                 // dataBit and codeCA are -1 or 1; cosine is the sine 90 degrees (128 steps) ahead
-                int ip = chan[i].dataBit * chan[i].codeCA * sinTable512[(iTable + 128) & 511] * gain[i];
-                int qp = chan[i].dataBit * chan[i].codeCA * sinTable512[iTable] * gain[i];
+                int ip = sampleRound(chan[i].dataBit * chan[i].codeCA * sinTable512[(iTable + 128) & 511] * gain[i], c->noise);
+                int qp = sampleRound(chan[i].dataBit * chan[i].codeCA * sinTable512[iTable] * gain[i], c->noise);
 
                 // Accumulate for all visible satellites
                 i_acc += ip;
@@ -894,8 +945,8 @@ static void generateSamples(gps_ctx_t *c) {
             if (sb->prn == 0)
                 continue;
             int iTable = (int) floor(sb->carr_phase * 512.0) & 511;
-            i_acc += sb->symVal * sb->codeCA * sinTable512[(iTable + 128) & 511] * c->sbas_gain[i];
-            q_acc += sb->symVal * sb->codeCA * sinTable512[iTable] * c->sbas_gain[i];
+            i_acc += sampleRound(sb->symVal * sb->codeCA * sinTable512[(iTable + 128) & 511] * c->sbas_gain[i], c->noise);
+            q_acc += sampleRound(sb->symVal * sb->codeCA * sinTable512[iTable] * c->sbas_gain[i], c->noise);
 
             sb->code_phase += sb->f_code * delt;
             if (sb->code_phase >= CA_SEQ_LEN) {
@@ -909,6 +960,12 @@ static void generateSamples(gps_ctx_t *c) {
             sb->codeCA = sb->ca[(int) sb->code_phase] * 2 - 1;
             sb->carr_phase += sb->f_carr * delt;
             sb->carr_phase -= floor(sb->carr_phase);
+        }
+
+        if (c->noise) {
+            uint32_t r = xorshift32(&c->rng);
+            i_acc += c->noise_tab[r & (NOISE_TABLE - 1)];
+            q_acc += c->noise_tab[(r >> 12) & (NOISE_TABLE - 1)];
         }
 
         c->iq_buff[isamp * 2] = (short) i_acc;

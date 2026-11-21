@@ -41,6 +41,7 @@ static struct argp_option options[] = {
     {"disable-sbas", 703, 0, 0, "Disable the SBAS GEO signals", 1},
     {"no-tui", 705, 0, 0, "No terminal UI: print status to stderr and exit when the simulation ends", 1},
     {"message", 706, "text", 0, "Send up to 22 characters (A-Z 0-9 space + - . ' : / \") as the GPS special message (subframe 4 page 17)", 1},
+    {"cn0", 707, "dB-Hz", 0, "Add a noise floor and set the C/N0 of a satellite overhead, 20-55; lower ones are weaker (default: no noise). Raise the TX gain until the receiver's C/N0 stops rising", 1},
     {"sbas", 704, "prn,longitude", 0, "Use only this SBAS GEO, e.g. 136,5.0 (default: the GEOs of the highest system in view)", 1},
     {0, 0, 0, 0, "SDR device types (use with --radio or -r option):", 3},
     {0, 0, 0, OPTION_DOC, "   none", 3},
