@@ -8,9 +8,7 @@
 #include <string.h>
 #include "gps-sim.h"
 #include "almanac.h"
-
-void eph2sbf(const ephem_t eph, const ionoutc_t ionoutc, const almanac_gps_t *alm, const char *msg, unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF]);
-void generateNavMsg(gpstime_t g, channel_t *chan, int init);
+#include "navmsg.h"
 
 static unsigned long sbf[N_SBF_PAGE][N_DWRD_SBF];
 static int failures;

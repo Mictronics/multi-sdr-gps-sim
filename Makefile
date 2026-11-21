@@ -41,12 +41,12 @@ $(BUILD_FLAGS): FORCE
 %.o: %.c $(BUILD_FLAGS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-gps-sim: fifo.o almanac.o sbas.o orbit.o rinex.o model.o gps.o gui.o sdr.o gps-sim.o $(SDR_OBJ)
+gps-sim: fifo.o almanac.o sbas.o orbit.o rinex.o model.o navmsg.o gps.o gui.o sdr.o gps-sim.o $(SDR_OBJ)
 	$(CC) -g -o $@ $^ $(LDFLAGS) $(LIBS) $(LIBS_SDR)
 
 # Unit tests, they need no SDR or terminal; gui and thread calls are stubbed.
 TEST_BINS = tests/test_nav tests/test_rinex tests/test_fifo tests/test_model tests/test_sbas tests/test_almanac
-TEST_COMMON = tests/stubs.o gps.o orbit.o rinex.o model.o almanac.o fifo.o sbas.o
+TEST_COMMON = tests/stubs.o gps.o orbit.o rinex.o model.o navmsg.o almanac.o fifo.o sbas.o
 
 tests/test_%: tests/test_%.o $(TEST_COMMON)
 	$(CC) -g -o $@ $^ $(LDFLAGS) $(LIBS)
