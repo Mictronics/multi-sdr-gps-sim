@@ -45,7 +45,7 @@ gps-sim: fifo.o almanac.o sbas.o orbit.o rinex.o model.o navmsg.o download.o gps
 	$(CC) -g -o $@ $^ $(LDFLAGS) $(LIBS) $(LIBS_SDR)
 
 # Unit tests, they need no SDR or terminal; gui and thread calls are stubbed.
-TEST_BINS = tests/test_nav tests/test_rinex tests/test_fifo tests/test_model tests/test_sbas tests/test_almanac
+TEST_BINS = tests/test_nav tests/test_rinex tests/test_fifo tests/test_model tests/test_sbas tests/test_almanac tests/test_codephase
 TEST_COMMON = tests/stubs.o gps.o orbit.o rinex.o model.o navmsg.o download.o almanac.o fifo.o sbas.o
 
 tests/test_%: tests/test_%.o $(TEST_COMMON)
@@ -53,6 +53,10 @@ tests/test_%: tests/test_%.o $(TEST_COMMON)
 
 # Brings its own download_file instead of gps.o's, so no network is used
 tests/test_almanac: tests/test_almanac.o tests/stubs.o almanac.o
+	$(CC) -g -o $@ $^ $(LDFLAGS) $(LIBS)
+
+# Includes gps.c itself for its static channel functions
+tests/test_codephase: tests/test_codephase.o $(filter-out gps.o,$(TEST_COMMON))
 	$(CC) -g -o $@ $^ $(LDFLAGS) $(LIBS)
 
 test: $(TEST_BINS)
