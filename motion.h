@@ -14,9 +14,13 @@
 #define MOTION_H
 
 /* Read the <trkpt> points of a GPX file and resample them linearly in ECEF onto 0.1 s steps.
- * Points without <ele> get default_height. Returns the number of steps written to xyz
- * (at most max), or -1 with *err set to the reason.
+ * <ele> is taken as above mean sea level (EGM96); points without it get default_height, which is
+ * above the ellipsoid like -l. Returns the number of steps written to xyz (at most max), or -1
+ * with *err set to the reason.
  */
 int readGpx(double xyz[][3], int max, const char *filename, double default_height, const char **err);
+
+/* EGM96 geoid height [m] above the WGS84 ellipsoid, bilinear on a 1 degree grid (lat, lon in degrees). */
+double geoidHeight(double lat, double lon);
 
 #endif /* MOTION_H */

@@ -17,11 +17,24 @@
 #include "gps.h"
 #include "orbit.h"
 #include "motion.h"
+#include "geoid_egm96.h"
 
 typedef struct {
     double t; // seconds since the first point
     double xyz[3];
 } trkpt_t;
+
+double geoidHeight(double lat, double lon) {
+    double y = (90.0 - lat) / GEOID_STEP, x = fmod(lon + 360.0, 360.0) / GEOID_STEP;
+    int r = (int) y, c = (int) x;
+    if (r >= GEOID_ROWS - 1)
+        r = GEOID_ROWS - 2;
+    double fy = y - r, fx = x - c;
+    int c1 = (c + 1) % GEOID_COLS;
+    double top = (1 - fx) * geoid_egm96[r][c] + fx * geoid_egm96[r][c1];
+    double bot = (1 - fx) * geoid_egm96[r + 1][c] + fx * geoid_egm96[r + 1][c1];
+    return ((1 - fy) * top + fy * bot) / GEOID_SCALE;
+}
 
 static char *readFile(const char *filename) {
     FILE *fp = fopen(filename, "rb");
@@ -87,12 +100,14 @@ static int parsePoints(const char *gpx, double default_height, trkpt_t **out, co
             *err = "every track point needs a <time>";
             goto fail;
         }
-        if (!attr(p, tag_end, "lat", &llh[0]) || !attr(p, tag_end, "lon", &llh[1])) {
-            *err = "track point without lat/lon";
+        // Negated so NaN fails too; geoidHeight indexes its table with these
+        if (!attr(p, tag_end, "lat", &llh[0]) || !attr(p, tag_end, "lon", &llh[1]) || !(fabs(llh[0]) <= 90.0) || !(fabs(llh[1]) <= 180.0)) {
+            *err = "track point without valid lat/lon";
             goto fail;
         }
+        // <ele> is above mean sea level in practice, the simulation needs the ellipsoid height
         if ((v = child(tag_end, body_end, "<ele>")) != NULL)
-            llh[2] = strtod(v, NULL);
+            llh[2] = strtod(v, NULL) + geoidHeight(llh[0], llh[1]);
         if (n == 0)
             t0 = t;
         t -= t0;
