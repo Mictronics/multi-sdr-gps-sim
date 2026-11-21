@@ -46,6 +46,7 @@ simulator_t simulator = {
 static bool gps_thread_started = false;
 static bool tx_off = false; // SDR closed after the simulation ended
 static bool tx_started = false;
+static int exit_code = EXIT_SUCCESS;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state);
 const char *argp_program_version = "v1.0";
@@ -353,10 +354,15 @@ int main(int argc, char** argv) {
             if (sdr_run() != 0) {
                 gui_status_wprintw(RED, "Starting SDR streaming failed.\n");
                 simulator.gps_thread_exit = true;
+                exit_code = EXIT_FAILURE;
             } else {
                 tx_started = true;
             }
         }
+    } else {
+        // End as after a finished run, or --no-tui waits forever
+        simulator.gps_thread_exit = true;
+        exit_code = EXIT_FAILURE;
     }
     // Run this until we get a termination signal.
     while (!simulator.main_exit) {
@@ -453,7 +459,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    cleanup_and_exit(EXIT_SUCCESS);
-    return (EXIT_SUCCESS);
+    cleanup_and_exit(exit_code);
+    return (exit_code);
 }
 
