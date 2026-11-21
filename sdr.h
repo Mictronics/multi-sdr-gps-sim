@@ -28,8 +28,8 @@ static inline uint64_t sdr_corrected_frequency(int ppb)
     return (uint64_t)((double)TX_FREQUENCY * (1.0 - ppb * 1e-9) + 0.5);
 }
 #define FREQ_ONE_MHZ (1000000ull)
-// 3 MHz is generated in Pluto SDR with integer dividers being multiple of 2
-#define TX_SAMPLERATE 3000000
+// 6 MS/s: about 3 samples per Galileo BOC(1,1) subchip; Pluto makes it with integer dividers (sdr_pluto.h)
+#define TX_SAMPLERATE 6000000
 #define TX_BW (TX_SAMPLERATE * 2)
 
 #define NUM_FIFO_BUFFERS 8

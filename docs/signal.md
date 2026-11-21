@@ -4,7 +4,7 @@
 
 ## Overview
 
-The simulator computes the GPS L1 C/A signal (1575.42 MHz) as complex baseband IQ at 3 MS/s and streams it to the SDR while it runs. Every 0.1 s it computes, for each GPS satellite above the horizon (0° elevation, up to 12 channels), the pseudorange and Doppler from the broadcast ephemeris and the user position, and generates the code, the navigation message and the carrier from them. Up to three SBAS GEO signals are added the same way (see [SBAS](#sbas)).
+The simulator computes the GPS L1 C/A signal (1575.42 MHz) as complex baseband IQ at 6 MS/s (3 MS/s until 2026-11; the higher rate leaves room for Galileo E1) and streams it to the SDR while it runs. Every 0.1 s it computes, for each GPS satellite above the horizon (0° elevation, up to 12 channels), the pseudorange and Doppler from the broadcast ephemeris and the user position, and generates the code, the navigation message and the carrier from them. Up to three SBAS GEO signals are added the same way (see [SBAS](#sbas)).
 
 The user position is static (`-l`, optionally moved by `-t distance,bearing,height`), follows a motion file (`-m`), or is steered from the keyboard in interactive mode (`-i`, see the key table in the README).
 
@@ -66,4 +66,4 @@ A motion file switches off interactive mode.
 
 ### IQ file (`-r iqfile`)
 
-`iqdata.bin` in the working directory: interleaved I and Q samples at 3 MS/s, signed 8 bit by default or signed 16 bit in the machine's byte order (little-endian on x86 and ARM) with `--iq16`. One second of signal is 6 MB (8 bit) or 12 MB (16 bit). The output for a given nav file, `-s` time and options is reproducible, which the [regression check](development.md) relies on.
+`iqdata.bin` in the working directory: interleaved I and Q samples at 6 MS/s, signed 8 bit by default or signed 16 bit in the machine's byte order (little-endian on x86 and ARM) with `--iq16`. One second of signal is 12 MB (8 bit) or 24 MB (16 bit). The output for a given nav file, `-s` time and options is reproducible, which the [regression check](development.md) relies on.

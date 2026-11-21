@@ -114,7 +114,7 @@ int sdr_lime_init(simulator_t *simulator) {
     LIME_CHECK(LMS_Open(&device, list[0], NULL));
     LIME_CHECK(LMS_Init(device));
     LIME_CHECK(LMS_EnableChannel(device, LMS_CH_TX, 0, true));
-    // Oversampling 4 puts CGEN at exactly 48 MHz; the default (32) misses 3 MS/s by -333 ppb
+    // LIME_OVERSAMPLE keeps CGEN at exactly 48 MHz; the default (32) missed 3 MS/s by -333 ppb
     LIME_CHECK(LMS_SetSampleRate(device, TX_SAMPLERATE, LIME_OVERSAMPLE));
 
     uint64_t freq_gps_hz = sdr_corrected_frequency(simulator->ppb);

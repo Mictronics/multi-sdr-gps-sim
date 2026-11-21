@@ -150,7 +150,8 @@ int sdr_hackrf_init(simulator_t *simulator) {
         return -1;
     }
 
-    if (!fifo_create(NUM_FIFO_BUFFERS, HACKRF_TRANSFER_BUFFER_SIZE, sizeof (signed char))) {
+    // 16 transfers hold 0.35 s at 6 MS/s, one 0.1 s block fills 4.6 of them
+    if (!fifo_create(2 * NUM_FIFO_BUFFERS, HACKRF_TRANSFER_BUFFER_SIZE, sizeof (signed char))) {
         gui_status_wprintw(RED, "Error creating TX fifo!");
         return -1;
     }
