@@ -15,7 +15,6 @@
 
 #include <stdatomic.h>
 #include <stdbool.h>
-#include <curl/curl.h>
 
 /* Real-time signal generation */
 #define REAL_TIME_GPS
@@ -209,9 +208,6 @@ typedef struct
     double azel[2];
     range_t rho0;
 } channel_t;
-
-#define DOWNLOAD_USER_AGENT "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
-CURLcode download_file(const char *url, const char *filename, long timeout, const atomic_bool *cancel);
 
 /* All ephemeris records of a RINEX file, grouped by satellite and sorted by clock time. */
 typedef struct

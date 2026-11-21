@@ -18,6 +18,7 @@
 #include "gps-sim.h"
 #include "gui.h"
 #include "almanac.h"
+#include "download.h"
 
 static almanac_gps_t almanac_gps;
 

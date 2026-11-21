@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include "gps.h"
 #include "almanac.h"
+#include "download.h"
 
 static int failures;
 static void expect(const char *what, long got, long want) {
