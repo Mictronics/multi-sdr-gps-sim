@@ -45,9 +45,9 @@ typedef struct
     double lat;
     double lon;
     double height;
-    double velocity;
-    double speed;
-    double vertical_speed;
+    double velocity;       // m/s
+    double speed;          // km/h, set in 1 km/h steps
+    double vertical_speed; // m/s
     bool valid;
 } target_t;
 

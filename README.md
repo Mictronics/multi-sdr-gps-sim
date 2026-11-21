@@ -71,8 +71,8 @@ SDR device types (use with --radio or -r option):
 |---|---|---|---|
 | `t` / `g` | TX gain +1 / -1 dB | `i` | info |
 | `w` / `s` | vertical speed +1 / -1 m/s (interactive mode) | `h`, `?` | help |
-| `d` / `a` | heading right / left (interactive mode) | `F1`, `F2`, `F3`, `TAB` | switch display: setup, status, dynamic position, next |
-| `e` / `q` | speed up / down (interactive mode) | `x` | exit |
+| `d` / `a` | heading 5° right / left (interactive mode) | `F1`, `F2`, `F3`, `TAB` | switch display: setup, status, dynamic position, next |
+| `e` / `q` | speed +1 / -1 km/h (interactive mode) | `x` | exit |
 
 Interactive mode (`-i`) starts at the `-l` position (or the `-t` target) and moves it by the speed, heading and vertical speed set with the keys, every 0.1 s. A motion file switches it off.
 

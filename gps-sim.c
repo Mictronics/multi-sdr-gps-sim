@@ -423,10 +423,10 @@ int main(int argc, char** argv) {
                     gui_resize();
                     break;
                 case LEFT_KEY:
-                    change_bearing(-127.0);
+                    change_bearing(-5000.0); // 5 degrees, the bearing is kept in thousandths
                     break;
                 case RIGHT_KEY:
-                    change_bearing(127.0);
+                    change_bearing(5000.0);
                     break;
                 case UP_KEY:
                     simulator.target.vertical_speed += 1;
@@ -438,13 +438,13 @@ int main(int argc, char** argv) {
                     break;
                 case UPSPEED_KEY:
                     simulator.target.speed += 1.0;
-                    simulator.target.velocity = simulator.target.speed / 100.0;
+                    simulator.target.velocity = simulator.target.speed / 3.6;
                     gui_show_speed((float) (simulator.target.velocity * 3.6));
                     break;
                 case DOWNSPEED_KEY:
                     simulator.target.speed -= 1.0;
                     if (simulator.target.speed < 0) simulator.target.speed = 0;
-                    simulator.target.velocity = simulator.target.speed / 100.0;
+                    simulator.target.velocity = simulator.target.speed / 3.6;
                     gui_show_speed((float) (simulator.target.velocity * 3.6));
                     break;
                 case GAIN_INC_KEY:
