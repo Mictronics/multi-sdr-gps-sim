@@ -4,8 +4,8 @@
  */
 #include <math.h>
 #include <stdio.h>
+#include "model.h"
 
-double tropoDelay(const double *llh, const double *azel);
 void codegen(int *ca, int prn);
 
 static int failures;

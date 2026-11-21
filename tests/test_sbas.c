@@ -7,9 +7,7 @@
 #include <string.h>
 #include "gps.h"
 #include "sbas.h"
-
-void sbasIonoUpdate(sbas_iono_t *ion, const ionoutc_t *ionoutc, gpstime_t g, const double *llh);
-double ionosphericDelay(const ionoutc_t *ionoutc, gpstime_t g, double *llh, double *azel);
+#include "model.h"
 
 static int failures;
 static void expect(const char *what, unsigned long got, unsigned long want) {
