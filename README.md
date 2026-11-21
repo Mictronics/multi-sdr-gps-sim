@@ -34,7 +34,7 @@ Options:
 --duration          -d  <seconds> Duration in seconds
 --target            -t  <distance,bearing,height> Target distance [m], bearing [°] and height [m]
 --ppb               -p  <ppb> Set oscillator error in ppb (default 0)
---radio             -r  <name> Set the SDR device type name (default none)
+--radio             -r  <name> SDR device type, required (see the list below)
 --uri               -U  <uri> ADLAM-Pluto URI
 --network           -N  <network> ADLAM-Pluto network IP or hostname (default pluto.local)
 --motion            -m  <name> User motion file (dynamic mode)
@@ -56,7 +56,6 @@ Options:
 --version           -V  Print program version
 
 SDR device types (use with --radio or -r option):
-    none
     iqfile
     hackrf
     plutosdr

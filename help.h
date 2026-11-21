@@ -32,7 +32,7 @@ static struct argp_option options[] = {
     {"target", 't', "distance,bearing,height", 0, "Target distance [m], bearing [°] and height [m]", 1},
     {"ppb", 'p', "ppb", 0, "Set oscillator error in ppb (default 0)", 1},
     {"rinex3", '3', 0, 0, "Use RINEX v3 navigation data format", 1},
-    {"radio", 'r', "name", 0, "Set the SDR device type name (default none)", 1},
+    {"radio", 'r', "name", 0, "SDR device type, required (see the list below)", 1},
     {"iq16", 700, 0, 0, "Set IQ sample size to 16 bit (default 8 bit)", 1},
     {"uri", 'U', "uri", 0, "ADLAM-Pluto URI", 1},
     {"network", 'N', "network", 0, "ADLAM-Pluto network IP or hostname (default pluto.local)", 1},
@@ -44,7 +44,6 @@ static struct argp_option options[] = {
     {"cn0", 707, "dB-Hz", 0, "Add a noise floor and set the C/N0 of a satellite overhead, 20-55; lower ones are weaker (default: no noise). Raise the TX gain until the receiver's C/N0 stops rising", 1},
     {"sbas", 704, "prn,longitude", 0, "Use only this SBAS GEO, e.g. 136,5.0 (default: the GEOs of the highest system in view)", 1},
     {0, 0, 0, 0, "SDR device types (use with --radio or -r option):", 3},
-    {0, 0, 0, OPTION_DOC, "   none", 3},
     {0, 0, 0, OPTION_DOC, "   iqfile", 3},
 #ifdef ENABLE_HACKRFSDR
     {0, 0, 0, OPTION_DOC, "   hackrf", 3},

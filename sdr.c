@@ -48,9 +48,10 @@ static sdr_handler sdr_handlers[] = {
     { NULL, NULL, NULL, NULL, NULL, SDR_NONE} /* must come last */
 };
 
+// Also reached without -r, or with -r none: "none" is internal, not a usable type
 static int no_init() {
-    gui_status_wprintw(RED, "SDR type not recognized; supported SDR types are:\n");
-    for (int i = 0; sdr_handlers[i].name; ++i) {
+    gui_status_wprintw(RED, "No or unknown SDR type, select one with -r:\n");
+    for (int i = 1; sdr_handlers[i].name; ++i) {
         gui_status_wprintw(RED, "  %s\n", sdr_handlers[i].name);
     }
     return -1;
