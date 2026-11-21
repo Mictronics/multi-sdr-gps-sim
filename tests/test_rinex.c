@@ -11,6 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "gps-sim.h"
+#include "rinex.h"
 
 #define SAMPLE "tests/data/sample_rinex3.rnx"
 #define MAX_LINES 200

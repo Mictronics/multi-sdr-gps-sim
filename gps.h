@@ -224,17 +224,6 @@ typedef struct
 /* Records further than this from the wanted time are not used: half of the 4 hour fit interval */
 #define EPH_MAX_AGE 7200.0
 
-/* Read the ephemerides of a RINEX 2 or 3 navigation file (see gps.c).
- * Returns the number of records, negative on error. */
-int readRinex(eph_table_t *tab, ionoutc_t *ionoutc, const char *fname, bool rinex3);
-
-/* For every satellite pick the record closest in time to t (vflg false if none is near enough). */
-void ephSelect(const eph_table_t *tab, gpstime_t t, ephem_t cur[MAX_SAT]);
-
-/* Fill the ionosphere and UTC groups the file did not provide with neutral values for the start time g,
- * so subframe 4 page 18 is complete. Returns true if anything was filled. */
-bool ionoDefaults(ionoutc_t *io, gpstime_t g);
-
 void *gps_thread_ep(void *arg);
 
 #endif /* GPS_H */
