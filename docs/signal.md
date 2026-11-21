@@ -38,7 +38,7 @@ Without `--cn0` the signal carries no noise, so the C/N0 a receiver reports depe
 
 The receiver then reports the requested values once the simulated noise is well above its own noise. To set it up, start at a low gain and raise it step by step (`t` in the program) until the receiver's C/N0 stops rising; from there on a higher gain changes nothing but the RF level, so stay at the lowest gain that reaches it. The output is reproducible: the same `-e`, `-s` and `--cn0` give the same `iqdata.bin`.
 
-Measured results per SDR are in [hardware](hardware.md#signal-level---cn0).
+Working gains with `--cn0` on a 60 dB cable were Pluto `-g -25`, HackRF `-g 40` and LimeSDR `-g 30`, about 20 dB above those without noise; the measurements are in [hardware](hardware.md#signal-level---cn0).
 
 ## SBAS
 
