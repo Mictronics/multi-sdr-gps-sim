@@ -37,7 +37,7 @@ Options:
 --radio             -r  <name> SDR device type, required (see the list below)
 --uri               -U  <uri> ADLAM-Pluto URI
 --network           -N  <network> ADLAM-Pluto network IP or hostname (default pluto.local)
---motion            -m  <name> User motion file (dynamic mode)
+--motion            -m  <name> User motion GPX track (dynamic mode)
 --iq16                  Set IQ sample size to 16 bit (default 8 bit)
 --disable-iono      -I  Disable ionospheric and tropospheric delay for spacecraft scenario
 --verbose           -v  Show verbose output and details about simulated channels
@@ -62,7 +62,7 @@ SDR device types (use with --radio or -r option):
     limesdr
 ````
 
-`-r iqfile` writes `iqdata.bin` instead of transmitting, `-m` takes a motion file; both formats are described in [docs/signal.md](docs/signal.md#files). The terminal needs at least 120x31 characters, or use `--no-tui`.
+`-r iqfile` writes `iqdata.bin` instead of transmitting, `-m` takes a GPX track; both formats are described in [docs/signal.md](docs/signal.md#files). The terminal needs at least 120x31 characters, or use `--no-tui`.
 
 ### Keys
 

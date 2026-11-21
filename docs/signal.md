@@ -56,11 +56,10 @@ Results with a u-blox NEO-M8T are in [hardware](hardware.md#sbas).
 
 ### Motion file (`-m`)
 
-A CSV text file with one line per 0.1 s: `time, x, y, z`, the position in ECEF metres (the time column is not used, the lines are taken as consecutive 0.1 s steps). The run ends at the last line or after `-d` seconds, whichever comes first; up to 864000 lines (24 hours). `circle.csv` in the repository is an example:
+A GPX 1.1 track, as written by GPS loggers, route planners, Google Earth (via a converter) or `gpsbabel`. Every `<trkpt>` of the file is used in order, across all tracks and segments; each needs `lat`, `lon` and a `<time>` (ISO 8601, `Z` or a `±hh:mm` offset), `<ele>` is optional and defaults to the `-l` height. The heights are taken as above the WGS84 ellipsoid, without a geoid correction. Only the time differences matter: the first point is the start position at the `-s` time, and the track is interpolated linearly in ECEF onto the 0.1 s steps, so 1 Hz or irregular points play at their recorded speed. The times must increase; a file without `<time>` (most route exports) is rejected, add timestamps at a set speed first (`gpsbabel`, GPX Studio). The run ends at the last point or after `-d` seconds, whichever comes first; up to 24 hours. `circle.gpx` in the repository is an example (a 300 s circle, one point per second):
 
 ```
-  0.0,-3813477.954, 3554276.552, 3662785.237
-  0.1,-3813477.599, 3554276.226, 3662785.918
+<trkpt lat="35.274015989" lon="137.014864092"><ele>100.001</ele><time>2026-01-01T00:00:00Z</time></trkpt>
 ```
 
 A motion file switches off interactive mode.

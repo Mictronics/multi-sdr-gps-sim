@@ -36,7 +36,7 @@ static struct argp_option options[] = {
     {"iq16", 700, 0, 0, "Set IQ sample size to 16 bit (default 8 bit)", 1},
     {"uri", 'U', "uri", 0, "ADLAM-Pluto URI", 1},
     {"network", 'N', "network", 0, "ADLAM-Pluto network IP or hostname (default pluto.local)", 1},
-    {"motion", 'm', "name", 0, "User motion file (dynamic mode)", 1},
+    {"motion", 'm', "name", 0, "User motion GPX track (dynamic mode)", 1},
     {"disable-almanac", 702, 0, 0, "Disable transmission of almanac information", 1},
     {"disable-sbas", 703, 0, 0, "Disable the SBAS GEO signals", 1},
     {"no-tui", 705, 0, 0, "No terminal UI: print status to stderr and exit when the simulation ends", 1},
