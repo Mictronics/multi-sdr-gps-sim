@@ -235,6 +235,12 @@ int sdr_pluto_init(simulator_t *simulator) {
     gui_mvwprintw(TRACK, y++, gui_x_offset, "Baseband filter bandwidth (%d Hz/%.03f MHz)", TX_BW, ((float) TX_BW / (float) FREQ_ONE_MHZ));
     gui_mvwprintw(TRACK, y++, gui_x_offset, "Sample rate (%u Hz/%.03f MHz)", irates[5], ((float) irates[5] / (float) FREQ_ONE_MHZ));
     gui_mvwprintw(TRACK, y++, gui_x_offset, "TX gain: %idB", simulator->tx_gain);
+    // The LO lands on L1 but the BBPLL can miss the rate (2999999 with xo_correction 39999867): code and
+    // carrier then disagree and receivers lose lock
+    if (irates[5] != TX_SAMPLERATE) {
+        gui_status_wprintw(RED, "Pluto sample rate is %u Hz, not %d: check xo_correction (%lu Hz, 40000000 for an OCXO).\n",
+                irates[5], TX_SAMPLERATE, xo_correction);
+    }
 
     if (simulator->show_verbose) {
         gui_mvwprintw(TRACK, y++, gui_x_offset, "XO Correction: %lu Hz", xo_correction);

@@ -2,7 +2,7 @@
 
 [Back to the README](../README.md)
 
-All tests ran conducted: the SDR output through a cable with 60 dB of attenuation, a DC block in front of receivers that power an active antenna, the amplifier off, no antenna. The HackRF One and the ADALM-Pluto used here are modified with an OCXO; a stock unit's crystal is less precise and less stable, so expect them to do worse without such a mod or an external reference. The LimeSDR Mini v1 ran from its own VCTCXO (about 1.4 ppm off; leave `-p` at 0, code and carrier stay consistent with it).
+All tests ran conducted: the SDR output through a cable with 60 dB of attenuation, a DC block in front of receivers that power an active antenna, the amplifier off, no antenna. The HackRF One and the ADALM-Pluto used here are modified with an OCXO; a stock unit's crystal is less precise and less stable, so expect them to do worse without such a mod or an external reference. The LimeSDR Mini v1 ran from its own VCTCXO (about 1.4 ppm off; leave `-p` at 0, code and carrier stay consistent with it). An OCXO-modded Pluto needs `xo_correction` 40000000 (`fw_setenv xo_correction 40000000` over ssh, or `xo_correction = 40000000` under `[SYSTEM]` in `config.txt`); a firmware update (v0.39 here) restores the factory value for the original crystal, the TX rate then reads back 2999999 Hz and the M8T lost lock and gave random fixes. gps-sim warns in red when the rate is not exactly 3000000 Hz.
 
 ## Working points
 
