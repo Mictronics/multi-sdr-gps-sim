@@ -16,7 +16,7 @@
 // LMS_SetGaindB range in LimeSuiteNG: TX PAD gain, 52 = full power, 2 dB steps below 42
 #define LIME_TX_GAIN_MIN 0
 #define LIME_TX_GAIN_MAX 52
-#define LIME_OVERSAMPLE 2 // CGEN stays at exactly 48 MHz, as with 4 at the earlier 3 MS/s
+#define LIME_OVERSAMPLE 2 // CGEN 8 x 5 MS/s = 40 MHz, read back exact
 // TX gain [dB] during calibration, before the user's gain is set
 #define LIME_CAL_GAIN 40
 

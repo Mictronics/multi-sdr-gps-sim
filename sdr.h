@@ -28,8 +28,9 @@ static inline uint64_t sdr_corrected_frequency(int ppb)
     return (uint64_t)((double)TX_FREQUENCY * (1.0 - ppb * 1e-9) + 0.5);
 }
 #define FREQ_ONE_MHZ (1000000ull)
-// 6 MS/s: about 3 samples per Galileo BOC(1,1) subchip; Pluto makes it with integer dividers (sdr_pluto.h)
-#define TX_SAMPLERATE 6000000
+// 5 MS/s: about 2.4 samples per Galileo BOC(1,1) subchip; Pluto makes it with integer dividers (sdr_pluto.h),
+// 6 MS/s (24 MB/s) underflows its USB 2 link
+#define TX_SAMPLERATE 5000000
 #define TX_BW (TX_SAMPLERATE * 2)
 
 #define NUM_FIFO_BUFFERS 8

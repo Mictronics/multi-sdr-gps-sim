@@ -254,10 +254,10 @@ static int allocateChannel(channel_t *chan, almanac_gps_t *alm, const char *msg,
 // --cn0 noise floor: sigma per I/Q component in iq_buff units; all outputs clip at +-2047, 5 sigma
 #define NOISE_SIGMA 400.0
 #define NOISE_TABLE 4096 // Gaussian values, indexed by 12 random bits
-// One chip value per sample at 6 MS/s correlates 0.15 dB worse with the ideal C/A code band-limited
+// One chip value per sample at 5 MS/s correlates 0.19 dB worse with the ideal C/A code band-limited
 // to +-fs/2 (3 MS/s: 0.34 dB)
 // (offline check, any Doppler); --cn0 adds it back so the usable C/N0 is the requested one
-#define CODE_SAMPLING_LOSS_DB 0.15
+#define CODE_SAMPLING_LOSS_DB 0.19
 
 // Satellites with a record near the start time that make -s now keep the ephemeris unshifted
 #define COVER_MIN_SATS 4

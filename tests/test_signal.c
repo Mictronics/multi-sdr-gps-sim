@@ -127,7 +127,7 @@ static void checkCn0(double cn0) {
         c.sbas[i].prn = 0;
 
     updateChannels(&c, 1);
-    // Path loss and antenna gain; the power includes what the 6 MS/s sampling loses in correlation
+    // Path loss and antenna gain; the power includes what the 5 MS/s sampling loses in correlation
     double want = cn0 + CODE_SAMPLING_LOSS_DB + 20.0 * log10(c.gain[keep] / c.level);
 
     short tab[NOISE_TABLE]; // Zeroed instead of clearing c.noise, which also selects the rounding
