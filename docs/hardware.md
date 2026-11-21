@@ -49,7 +49,7 @@ With `--cn0` the reported C/N0 only reaches the requested value once the simulat
 | HackRF One (`-g 20` … `40`) | -6.7 | -3.9 | -2.5 | -1.7 | **-1.3** |
 | LimeSDR Mini v1 (`-g 10` … `30`) | -8.3 | -4.3 | -3.8 | -1.8 | **-1.4** |
 
-So the working points with `--cn0` are about 20 dB above those without noise: **Pluto `-g -25`, HackRF `-g 40`, LimeSDR `-g 30`** on this setup. A further 5 dB would gain 0.2-0.4 dB. The Pluto ramp was measured before the 0.34 dB compensation below; with it, its last value would be about -1.6 dB. The Lime's step from `-g 15` to `-g 20` gave only 0.5 dB, the next one 2 dB, possibly an uneven TX gain step; it was not repeated. All runs kept an SBAS fix from about +5 dB on.
+So the working points with `--cn0` are about 20 dB above those without noise: **Pluto `-g -25`, HackRF `-g 40`, LimeSDR `-g 30`** on this setup. A further 5 dB would gain 0.2-0.4 dB. The Pluto ramp was measured before the 0.34 dB compensation below; with it, its last value would be about -1.6 dB. The Lime's step from `-g 15` to `-g 20` gave only 0.5 dB, the next one 2 dB, possibly an uneven TX gain step; it was not repeated. Every run had an SBAS fix except the Pluto at +0 dB, where the GEOs were not acquired.
 
 At the Pluto's working point the offset depends on the requested level:
 
