@@ -21,8 +21,8 @@
 
 char rinex_date[21];
 
-/* Replace all 'E' exponential designators to 'D'
- * str String in which all occurrences of 'E' are replaced with *  'D'
+/* Replace Fortran 'D' (or 'd') exponent designators with 'E', so atof can parse them
+ * str String in which all occurrences of 'D' and 'd' are replaced with 'E'
  * len Length of input string in bytes
  * Number of characters replaced
  */
