@@ -259,8 +259,8 @@ static int providerId(const char *system) {
     return 14;
 }
 
-/* MT17: almanac of the GEOs being sent, at rest in their slots. Receivers that know a real
- * almanac (EGNOS lists only 121 and 136) otherwise never search an extra GEO such as 150. */
+/* MT17: almanac of the GEOs being sent, at rest in their slots. Without it the M8T still tracks
+ * and uses all GEOs but cannot name the system (NAV-SBAS sys -1 instead of EGNOS). */
 static void mt17(const sbas_geo_t *geos, int ngeo, int sec, unsigned char *data) {
     int off = 0;
     for (int k = 0; k < 3; k++) {
