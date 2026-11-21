@@ -14,6 +14,7 @@
 #define GPS_H
 
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <curl/curl.h>
 
 /* Real-time signal generation */
